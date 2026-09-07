@@ -42,10 +42,14 @@ The exit code is the binary's own. In a shell wrapper such as
 It asks the binary whether the command runs `git commit`; if so, it opens
 the window and denies the commit with the reason when the exit code is 10.
 
-It is wired in this project's `.claude/settings.json`. To enable it
-everywhere, copy the `hooks` block into `~/.claude/settings.json`.
-Claude Code snapshots hooks at startup: restart the session after editing
-settings.
+Register it in `~/.claude/settings.json` for every session, or in a
+project's `.claude/settings.json` for that project only:
+
+    "hooks": {
+      "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command",
+        "command": "/Users/max/Documents/projects/commit-review/hooks/review-before-commit.sh",
+        "timeout": 3600 }] }]
+    }
 
 Rebuild the binary before changing the hook script: the script is read on
 every Bash call of every session, and an old binary given a new flag opens
