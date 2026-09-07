@@ -1,8 +1,10 @@
 //! commit-review: human review window before a commit started by Claude Code.
 //!
-//! Usage: `commit-review [--command <intercepted shell command>]`
+//! Usage:
+//!   commit-review [--command <shell command>]   open the window
+//!   commit-review --is-commit <shell command>   exit 0 if it runs git commit, 1 otherwise
 //!
-//! Exit contract, read by hooks/review-before-commit.sh:
+//! Exit contract of the window, read by hooks/review-before-commit.sh:
 //!   - accept:  nothing on stdout, exit 0
 //!   - deny:    the reason on stdout, exit 10
 //!   - failure: message on stderr, any other code
@@ -45,14 +47,15 @@ fn git(args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
 }
 
-/// Value of `--command` on the command line, if present.
-fn command_arg() -> Option<String> {
+/// Value of `--<name> <value>` or `--<name>=<value>` on the command line.
+fn flag_value(name: &str) -> Option<String> {
+    let flag = format!("--{name}");
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
-        if a == "--command" {
+        if a == flag {
             return args.next();
         }
-        if let Some(v) = a.strip_prefix("--command=") {
+        if let Some(v) = a.strip_prefix(&flag).and_then(|v| v.strip_prefix('=')) {
             return Some(v.to_string());
         }
     }
@@ -72,7 +75,7 @@ fn exit_with(code: i32, stdout_line: Option<&str>) -> ! {
 /// What the window shows.
 #[tauri::command]
 fn context() -> Result<Context, String> {
-    let command = command_arg();
+    let command = flag_value("command");
     let message = command.as_deref().and_then(message::extract);
     let ascii_issues = message.as_ref().map(|m| AsciiIssues {
         subject: message::non_printable_ascii(&m.subject),
@@ -98,6 +101,10 @@ fn decide(accept: bool, reason: String) {
 }
 
 fn main() {
+    if let Some(cmd) = flag_value("is-commit") {
+        std::process::exit(if message::is_git_commit(&cmd) { 0 } else { 1 });
+    }
+
     let app = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![context, decide])
         .setup(|app| {

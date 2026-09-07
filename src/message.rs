@@ -1,9 +1,10 @@
-//! Extracts the commit message from the intercepted shell command.
+//! Reads the intercepted shell command: tells whether it runs `git commit`
+//! and extracts the commit message.
 //!
 //! Best effort, nothing is executed: `-m "..."`, `-m '...'`,
 //! `--message=...`, `-am ...`, several `-m` (separate paragraphs, like
 //! git), and the `$(cat <<'EOF' ... EOF)` heredoc Claude Code uses.
-//! When nothing is recognized, the UI shows the raw command instead.
+//! When no message is recognized, the UI shows the raw command instead.
 
 /// Message split the way git does: subject = first paragraph,
 /// body = everything after the first blank line.
@@ -28,6 +29,26 @@ pub fn non_printable_ascii(text: &str) -> Vec<NonAscii> {
         .filter(|(_, c)| *c != '\n' && !(' '..='~').contains(c))
         .map(|(index, c)| NonAscii { index, code: c as u32 })
         .collect()
+}
+
+/// True when the command runs `git commit` itself, as opposed to merely
+/// mentioning it inside a quoted string or a heredoc body.
+pub fn is_git_commit(cmd: &str) -> bool {
+    let words = shell_words(&strip_heredocs(cmd));
+    for (i, w) in words.iter().enumerate() {
+        if w != "git" {
+            continue;
+        }
+        let mut j = i + 1;
+        while words.get(j).is_some_and(|w| w.starts_with('-')) {
+            // `-C <path>` and `-c <key=value>` take a value.
+            j += if words[j] == "-C" || words[j] == "-c" { 2 } else { 1 };
+        }
+        if words.get(j).is_some_and(|w| w == "commit") {
+            return true;
+        }
+    }
+    false
 }
 
 pub fn extract(cmd: &str) -> Option<CommitMessage> {
@@ -58,27 +79,52 @@ fn split(raw: &str) -> CommitMessage {
     }
 }
 
-/// Content of a `<<EOF`, `<<'EOF'`, `<<"EOF"` or `<<-EOF` heredoc.
-fn heredoc_body(text: &str) -> Option<String> {
-    let start = text.find("<<")?;
-    let rest = &text[start + 2..];
+/// The command with heredoc bodies removed, so their text is not read as
+/// commands.
+fn strip_heredocs(cmd: &str) -> String {
+    let mut out = String::new();
+    let mut lines = cmd.lines();
+    while let Some(line) = lines.next() {
+        out.push_str(line);
+        out.push('\n');
+        let Some(delim) = heredoc_delimiter(line) else {
+            continue;
+        };
+        for body_line in lines.by_ref() {
+            if body_line.trim() == delim {
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Delimiter word of a `<<EOF`, `<<'EOF'`, `<<"EOF"` or `<<-EOF` on the line.
+fn heredoc_delimiter(line: &str) -> Option<String> {
+    let rest = &line[line.find("<<")? + 2..];
     let rest = rest.strip_prefix('-').unwrap_or(rest).trim_start_matches(' ');
     let rest = rest.strip_prefix(['\'', '"']).unwrap_or(rest);
     let delim: String = rest
         .chars()
         .take_while(|c| c.is_alphanumeric() || *c == '_')
         .collect();
-    if delim.is_empty() {
-        return None;
-    }
-    let after_delim = &rest[delim.len()..];
-    let content = &after_delim[after_delim.find('\n')? + 1..];
-    let mut lines = Vec::new();
-    for line in content.lines() {
-        if line.trim() == delim {
-            return Some(lines.join("\n"));
+    (!delim.is_empty()).then_some(delim)
+}
+
+/// Content of the first heredoc in the text.
+fn heredoc_body(text: &str) -> Option<String> {
+    let mut lines = text.lines();
+    let delim = loop {
+        if let Some(delim) = heredoc_delimiter(lines.next()?) {
+            break delim;
         }
-        lines.push(line);
+    };
+    let mut body = Vec::new();
+    for line in lines {
+        if line.trim() == delim {
+            return Some(body.join("\n"));
+        }
+        body.push(line);
     }
     None
 }
@@ -241,5 +287,21 @@ mod tests {
     #[test]
     fn multiline_subject_is_folded() {
         assert_eq!(extract("git commit -m 'line one\nline two\n\nbody'"), msg("line one line two", "body"));
+    }
+
+    #[test]
+    fn detects_a_real_git_commit() {
+        assert!(is_git_commit("git commit -m x"));
+        assert!(is_git_commit("git add -A && git commit -m \"$(cat <<'EOF'\nsubject\nEOF\n)\""));
+        assert!(is_git_commit("git -C /tmp/repo commit -am x"));
+        assert!(is_git_commit("git -c user.name=me commit"));
+    }
+
+    #[test]
+    fn ignores_git_commit_mentioned_in_text() {
+        assert!(!is_git_commit("cat > README.md <<'EOF'\nrun git commit -m x\nEOF"));
+        assert!(!is_git_commit("echo \"git commit\""));
+        assert!(!is_git_commit("git status"));
+        assert!(!is_git_commit("cargo build"));
     }
 }
