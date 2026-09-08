@@ -21,19 +21,21 @@ through `~/.zshrc`, so there is nothing to install.
 on stdin and exits 0 at once unless the command runs `git commit` itself;
 a mention inside a quoted string or a heredoc body does not count. Then it
 opens the window in the event's cwd. Deny prints the hook's JSON answer
-with the reason. A crash denies as well.
+with the notes as the reason; Accept with notes prints an allow with the
+notes as `additionalContext`, so the agent reads them either way. A crash
+denies as well.
 
 The second form is a manual launch inside a git repository. With
 `--command`, it extracts the commit message (`-m`, `--message`, `-am`,
 `$(cat <<'EOF' ... EOF)` heredoc) and shows it; without, only the file
 list is shown. Parser: `src/message.rs`.
 
-| Decision              | stdout     | exit  |
-| --------------------- | ---------- | ----- |
-| Accept                | nothing    | 0     |
-| Deny                  | the reason | 10    |
-| Window closed, Cmd+Q  | the reason | 10    |
-| Failure               | stderr     | other |
+| Decision              | stdout            | exit  |
+| --------------------- | ----------------- | ----- |
+| Accept                | the notes, if any | 0     |
+| Deny                  | the notes         | 10    |
+| Window closed, Cmd+Q  | the reason        | 10    |
+| Failure               | stderr            | other |
 
 The exit code is the binary's own. In a shell wrapper such as
 `commit-review; echo $?`, the echo returns 0, not the binary.
@@ -47,15 +49,13 @@ amend. A file tree with a filter sits on the left; each file collapses,
 takes a file-level comment, and can be marked Viewed, which collapses it
 and counts it. Lines are numbered on both sides. The "+" on a line opens
 a comment; dragging it selects a range. Comments stay pending and
-editable until Deny, which sends them to Claude after the deny reason,
+editable until the decision, which sends them to the agent after the notes,
 each as:
 
     src/main.rs:L42-L45
     > -old line
     > +new line
     the comment
-
-`--view review` opens the window on that view.
 
 ## Claude Code hook
 

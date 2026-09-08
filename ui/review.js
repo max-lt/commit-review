@@ -319,7 +319,7 @@ function lineRef(lines) {
   return "old L" + olds[0] + (olds.length > 1 ? "-L" + olds.at(-1) : "");
 }
 
-// The pending comments as text for Claude: where, the quoted lines, the note.
+// The pending comments as text for the agent: where, the quoted lines, the note.
 function reviewText() {
   return comments.map((c) => {
     if (c.start === FILE) return where(c.file, FILE, FILE) + "\n" + c.text;

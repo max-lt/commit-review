@@ -1,18 +1,19 @@
 // Summary view and the decision. Loaded after review.js.
 
 const { invoke } = window.__TAURI__.core;
-const DEFAULT_DENY = "Commit denied by human review, no reason given. Do not retry the commit: ask Max what should change.";
+const DEFAULT_DENY = "Commit denied by human review, no reason given. Do not retry the commit: ask the reviewer what should change.";
 const $ = (id) => document.getElementById(id);
 let scope = "worktree";
 let user = "You";
 
-const denyReason = () => {
-  const text = $("reason").value.trim();
-  const review = reviewText();
-  if (!text && !review) return DEFAULT_DENY;
-  return "Commit denied by human review. Reason:\n" + [text, review].filter(Boolean).join("\n\n");
+// The notes and comments go to the agent with either decision.
+const decide = (accept) => {
+  const notes = [$("reason").value.trim(), reviewText()].filter(Boolean).join("\n\n");
+  let text = "";
+  if (!accept) text = notes ? "Commit denied by human review. Reason:\n" + notes : DEFAULT_DENY;
+  else if (notes) text = "Commit accepted by human review, with notes:\n" + notes;
+  return invoke("decide", { accept, notes: text });
 };
-const decide = (accept) => invoke("decide", { accept, reason: accept ? "" : denyReason() });
 $("accept").onclick = () => decide(true);
 $("deny").onclick = () => decide(false);
 $("toggle-review").onclick = () => toggleReview();
@@ -42,7 +43,7 @@ const render = (el, text, issues) => {
   flush();
 };
 
-// Appends a line to the deny reason, on its own line.
+// Appends a line to the notes, on its own line.
 const appendReason = (line) => {
   const r = $("reason");
   if (r.value && !r.value.endsWith("\n")) r.value += "\n";
@@ -55,7 +56,7 @@ const badge = (name, count) => {
   b.type = "button";
   b.className = "badge";
   b.textContent = name + ": " + count + " non-ASCII";
-  b.title = "Add to the deny reason";
+  b.title = "Add to the notes";
   b.onclick = () => appendReason(b.textContent);
   $("message-label").appendChild(b);
 };
@@ -68,7 +69,7 @@ invoke("context").then((ctx) => {
   $("repo").textContent = repo;
   let noChanges = "(no changes)";
   if (amend) {
-    $("title").textContent = "Claude wants to amend " + amend.head.split(" ")[0];
+    $("title").textContent = "The agent wants to amend " + amend.head.split(" ")[0];
     $("amend-head").textContent = amend.head;
     $("amend-stat").textContent = amend.stat;
     $("amend").hidden = false;
@@ -93,7 +94,6 @@ invoke("context").then((ctx) => {
     $("subject").textContent = command ? "(message not recognized, see the exact command)" : "(manual launch, no command given)";
     $("subject").classList.add("muted");
   }
-  if (ctx.view === "review") toggleReview();
 }).catch((e) => {
   $("status").textContent = "git error: " + e;
   $("status").classList.add("err");

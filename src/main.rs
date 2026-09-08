@@ -4,8 +4,7 @@
 //!   commit-review hook                Claude Code PreToolUse hook: reads the
 //!                                     event JSON on stdin, answers on stdout
 //!   commit-review [--command <cmd>]   manual launch: exit 0 = accept,
-//!                                     exit 10 = deny with the reason on stdout
-//!   --view review                     open on the diff instead of the summary
+//!                                     exit 10 = deny; the notes on stdout
 
 mod diff;
 mod git;
@@ -39,7 +38,7 @@ struct Context {
     status: String,
     /// The reviewer, from git config, for the comment boxes.
     user: String,
-    /// The command Claude is about to run, when known.
+    /// The command the agent is about to run, when known.
     command: Option<String>,
     message: Option<message::CommitMessage>,
     /// Characters outside printable ASCII in the message, per field.
@@ -47,8 +46,6 @@ struct Context {
     /// The commit being rewritten by `--amend`, if any.
     amend: Option<Amend>,
     scope: message::Scope,
-    /// `--view review` opens the diff instead of the summary.
-    view: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -96,21 +93,35 @@ fn hook() -> ! {
 }
 
 fn deny(output: Output, reason: &str) -> ! {
-    let (line, code) = match output {
+    finish(output, false, reason)
+}
+
+/// Leaves the process with the decision. The text reaches the agent either
+/// way: as the deny reason, or as extra context on an accepted commit.
+fn finish(output: Output, accept: bool, text: &str) -> ! {
+    let line = match output {
+        Output::Plain => text.to_string(),
+        Output::Hook if accept && text.is_empty() => String::new(),
         Output::Hook => {
-            let json = serde_json::json!({
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
-            });
-            (json.to_string(), 0)
+            let mut fields = serde_json::json!({ "hookEventName": "PreToolUse" });
+            if accept {
+                fields["permissionDecision"] = "allow".into();
+                fields["additionalContext"] = text.into();
+            } else {
+                fields["permissionDecision"] = "deny".into();
+                fields["permissionDecisionReason"] = text.into();
+            }
+            serde_json::json!({ "hookSpecificOutput": fields }).to_string()
         }
-        Output::Plain => (reason.to_string(), EXIT_DENIED),
     };
-    println!("{line}");
+    if !line.is_empty() {
+        println!("{line}");
+    }
     let _ = std::io::stdout().flush();
+    let code = match (output, accept) {
+        (Output::Plain, false) => EXIT_DENIED,
+        _ => 0,
+    };
     std::process::exit(code)
 }
 
@@ -165,7 +176,6 @@ fn context(review: tauri::State<Review>) -> Result<Context, String> {
         status: git::run(&["status", "--short"])?,
         user: git::run(&["config", "user.name"]).unwrap_or_else(|_| "You".to_string()),
         scope: scope_of(command.as_deref()),
-        view: flag_value("view"),
         command,
         message,
         ascii_issues,
@@ -180,22 +190,38 @@ fn changes(review: tauri::State<Review>) -> Result<Vec<diff::FileDiff>, String> 
     diff::changes(scope_of(command), command.is_some_and(message::amends))
 }
 
-/// Resizes and re-centers the window, for the wider review view.
+/// Resizes the window for the review or the summary view.
 #[tauri::command]
 fn resize(window: tauri::WebviewWindow, width: f64, height: f64) -> Result<(), String> {
-    window
-        .set_size(tauri::LogicalSize::new(width, height))
-        .and_then(|_| window.center())
-        .map_err(|e| e.to_string())
+    fit(&window, width, height).map_err(|e| e.to_string())
 }
 
-/// The reviewer's decision.
+/// Applies the size and keeps the window inside the screen's work area,
+/// moving it no more than needed. The size is applied asynchronously, so
+/// the position is computed here rather than left to `center()`.
+fn fit(window: &tauri::WebviewWindow, width: f64, height: f64) -> tauri::Result<()> {
+    let Some(monitor) = window.current_monitor()? else {
+        return window.set_size(tauri::LogicalSize::new(width, height));
+    };
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let area_pos: tauri::LogicalPosition<f64> = area.position.to_logical(scale);
+    let area_size: tauri::LogicalSize<f64> = area.size.to_logical(scale);
+    // Title bar: the difference between the outer and the inner size.
+    let chrome = f64::from(window.outer_size()?.height - window.inner_size()?.height) / scale;
+    let width = width.min(area_size.width);
+    let height = height.min(area_size.height - chrome);
+    let pos: tauri::LogicalPosition<f64> = window.outer_position()?.to_logical(scale);
+    let x = pos.x.min(area_pos.x + area_size.width - width).max(area_pos.x);
+    let y = pos.y.min(area_pos.y + area_size.height - height - chrome).max(area_pos.y);
+    window.set_size(tauri::LogicalSize::new(width, height))?;
+    window.set_position(tauri::LogicalPosition::new(x, y))
+}
+
+/// The reviewer's decision, with the notes and comments left in the window.
 #[tauri::command]
-fn decide(review: tauri::State<Review>, accept: bool, reason: String) {
-    if accept {
-        std::process::exit(0)
-    }
-    deny(review.output, reason.trim())
+fn decide(review: tauri::State<Review>, accept: bool, notes: String) {
+    finish(review.output, accept, notes.trim())
 }
 
 fn review(command: Option<String>, output: Output) -> ! {
