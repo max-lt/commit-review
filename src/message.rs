@@ -6,6 +6,9 @@
 //! git), and the `$(cat <<'EOF' ... EOF)` heredoc Claude Code uses.
 //! When no message is recognized, the UI shows the raw command instead.
 
+use std::iter::Peekable;
+use std::str::Chars;
+
 /// Message split the way git does: subject = first paragraph,
 /// body = everything after the first blank line.
 #[derive(serde::Serialize, Debug, PartialEq, Eq)]
@@ -34,7 +37,44 @@ pub fn non_printable_ascii(text: &str) -> Vec<NonAscii> {
 /// True when the command runs `git commit` itself, as opposed to merely
 /// mentioning it inside a quoted string or a heredoc body.
 pub fn is_git_commit(cmd: &str) -> bool {
+    commit_index(&shell_words(&strip_heredocs(cmd))).is_some()
+}
+
+/// True when the command rewrites HEAD with `--amend`.
+pub fn amends(cmd: &str) -> bool {
+    commit_options(cmd).iter().any(|w| w == "--amend")
+}
+
+/// Revision whose message `-C`, `-c`, `--reuse-message=` or
+/// `--reedit-message=` takes over, if any.
+pub fn reused_message_rev(cmd: &str) -> Option<String> {
+    let options = commit_options(cmd);
+    let mut words = options.iter();
+    while let Some(w) = words.next() {
+        if w == "-C" || w == "-c" {
+            return words.next().cloned();
+        }
+        let long = w
+            .strip_prefix("--reuse-message=")
+            .or_else(|| w.strip_prefix("--reedit-message="));
+        if let Some(rev) = long {
+            return Some(rev.to_string());
+        }
+    }
+    None
+}
+
+/// Words after the `commit` subcommand, heredoc bodies stripped.
+fn commit_options(cmd: &str) -> Vec<String> {
     let words = shell_words(&strip_heredocs(cmd));
+    match commit_index(&words) {
+        Some(i) => words[i + 1..].to_vec(),
+        None => Vec::new(),
+    }
+}
+
+/// Index of the `commit` word when the words run `git commit`.
+fn commit_index(words: &[String]) -> Option<usize> {
     for (i, w) in words.iter().enumerate() {
         if w != "git" {
             continue;
@@ -45,12 +85,13 @@ pub fn is_git_commit(cmd: &str) -> bool {
             j += if words[j] == "-C" || words[j] == "-c" { 2 } else { 1 };
         }
         if words.get(j).is_some_and(|w| w == "commit") {
-            return true;
+            return Some(j);
         }
     }
-    false
+    None
 }
 
+/// The message given on the command line, if any.
 pub fn extract(cmd: &str) -> Option<CommitMessage> {
     let mut paragraphs: Vec<String> = message_flags(cmd)
         .into_iter()
@@ -60,27 +101,27 @@ pub fn extract(cmd: &str) -> Option<CommitMessage> {
         // `git commit -F - <<EOF` or another form without -m: try a bare heredoc.
         paragraphs.extend(heredoc_body(cmd));
     }
-    let raw = paragraphs.join("\n\n");
-    if raw.trim().is_empty() {
-        return None;
-    }
-    Some(split(&raw))
+    from_raw(&paragraphs.join("\n\n"))
 }
 
-fn split(raw: &str) -> CommitMessage {
+/// A message as git stores it (`%B`), split into subject and body.
+pub fn from_raw(raw: &str) -> Option<CommitMessage> {
     let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
     let (subject, body) = match raw.split_once("\n\n") {
         Some((s, b)) => (s, b.trim()),
         None => (raw, ""),
     };
-    CommitMessage {
+    Some(CommitMessage {
         subject: subject.lines().map(str::trim).collect::<Vec<_>>().join(" "),
         body: body.to_string(),
-    }
+    })
 }
 
 /// The command with heredoc bodies removed, so their text is not read as
-/// commands.
+/// commands. The closing delimiter line stays, so the heredoc still ends.
 fn strip_heredocs(cmd: &str) -> String {
     let mut out = String::new();
     let mut lines = cmd.lines();
@@ -92,6 +133,8 @@ fn strip_heredocs(cmd: &str) -> String {
         };
         for body_line in lines.by_ref() {
             if body_line.trim() == delim {
+                out.push_str(body_line);
+                out.push('\n');
                 break;
             }
         }
@@ -161,13 +204,13 @@ fn message_flags(cmd: &str) -> Vec<String> {
     out
 }
 
-/// Splits into words, honoring single quotes, double quotes and backslash.
-/// Enough to read options, not a real shell parser.
+/// Splits into words, honoring single quotes, double quotes, backslash and
+/// `$(...)` substitutions. Enough to read options, not a real shell parser.
 fn shell_words(cmd: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut cur = String::new();
     let mut in_word = false;
-    let mut chars = cmd.chars();
+    let mut chars = cmd.chars().peekable();
     while let Some(c) = chars.next() {
         match c {
             '\'' => {
@@ -192,6 +235,10 @@ fn shell_words(cmd: &str) -> Vec<String> {
                                 cur.push(n);
                             }
                         },
+                        '$' if chars.peek() == Some(&'(') => {
+                            cur.push('$');
+                            substitution(&mut chars, &mut cur);
+                        }
                         _ => cur.push(c),
                     }
                 }
@@ -202,6 +249,11 @@ fn shell_words(cmd: &str) -> Vec<String> {
                     Some('\n') | None => {}
                     Some(n) => cur.push(n),
                 }
+            }
+            '$' if chars.peek() == Some(&'(') => {
+                in_word = true;
+                cur.push('$');
+                substitution(&mut chars, &mut cur);
             }
             c if c.is_whitespace() => {
                 if in_word {
@@ -221,6 +273,64 @@ fn shell_words(cmd: &str) -> Vec<String> {
     words
 }
 
+/// Appends a `(...)` substitution body up to its closing paren. Quoted spans
+/// and heredocs are copied as they are, so their quotes and parens do not
+/// count.
+fn substitution(chars: &mut Peekable<Chars>, cur: &mut String) {
+    let mut depth = 0;
+    while let Some(c) = chars.next() {
+        cur.push(c);
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return;
+                }
+            }
+            '\'' | '"' => {
+                for n in chars.by_ref() {
+                    cur.push(n);
+                    if n == c {
+                        break;
+                    }
+                }
+            }
+            '<' if chars.peek() == Some(&'<') => {
+                cur.push(chars.next().unwrap());
+                heredoc(chars, cur);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Appends a heredoc, from its delimiter word to the line that closes it.
+fn heredoc(chars: &mut Peekable<Chars>, cur: &mut String) {
+    let first = line(chars, cur);
+    let Some(delim) = heredoc_delimiter(&format!("<<{first}")) else {
+        return;
+    };
+    while chars.peek().is_some() {
+        if line(chars, cur).trim() == delim {
+            return;
+        }
+    }
+}
+
+/// Appends one line, newline included, and returns it without the newline.
+fn line(chars: &mut Peekable<Chars>, cur: &mut String) -> String {
+    let mut text = String::new();
+    for c in chars.by_ref() {
+        cur.push(c);
+        if c == '\n' {
+            break;
+        }
+        text.push(c);
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,6 +346,14 @@ mod tests {
             extract(cmd),
             msg("Add review window", "Show subject and body.\n\nTrailer: value")
         );
+    }
+
+    #[test]
+    fn heredoc_body_may_contain_quotes_and_parens() {
+        let cmd = "git commit -m \"$(cat <<'EOF'\nui: subject\n\nShowed \"no changes\" (none) for --amend.\nEOF\n)\" --amend && git log -1";
+        assert_eq!(extract(cmd), msg("ui: subject", "Showed \"no changes\" (none) for --amend."));
+        assert!(amends(cmd));
+        assert!(is_git_commit(cmd));
     }
 
     #[test]
@@ -295,6 +413,17 @@ mod tests {
         assert!(is_git_commit("git add -A && git commit -m \"$(cat <<'EOF'\nsubject\nEOF\n)\""));
         assert!(is_git_commit("git -C /tmp/repo commit -am x"));
         assert!(is_git_commit("git -c user.name=me commit"));
+    }
+
+    #[test]
+    fn amend_and_reused_message() {
+        assert!(amends("git commit --amend --no-edit"));
+        assert!(amends("git add -A && git commit --amend -m 'new subject'"));
+        assert!(!amends("git commit -m 'says --amend in the message'"));
+        assert!(!amends("git rebase --amend"));
+        assert_eq!(reused_message_rev("git commit --amend -C HEAD~1"), Some("HEAD~1".into()));
+        assert_eq!(reused_message_rev("git commit --reuse-message=abc123"), Some("abc123".into()));
+        assert_eq!(reused_message_rev("git -c user.name=me commit --amend"), None);
     }
 
     #[test]

@@ -28,12 +28,24 @@ struct Context {
     message: Option<message::CommitMessage>,
     /// Characters outside printable ASCII in the message, per field.
     ascii_issues: Option<AsciiIssues>,
+    /// The commit being rewritten by `--amend`, if any.
+    amend: Option<Amend>,
 }
 
 #[derive(serde::Serialize)]
 struct AsciiIssues {
     subject: Vec<message::NonAscii>,
     body: Vec<message::NonAscii>,
+}
+
+#[derive(serde::Serialize)]
+struct Amend {
+    /// Short hash and subject of HEAD.
+    head: String,
+    /// Files HEAD already touches, from `git show --stat`.
+    stat: String,
+    /// The message is taken over from a commit, not given on the command line.
+    message_kept: bool,
 }
 
 fn git(args: &[&str]) -> Result<String, String> {
@@ -76,7 +88,24 @@ fn exit_with(code: i32, stdout_line: Option<&str>) -> ! {
 #[tauri::command]
 fn context() -> Result<Context, String> {
     let command = flag_value("command");
-    let message = command.as_deref().and_then(message::extract);
+    let mut message = command.as_deref().and_then(message::extract);
+    let mut amend = None;
+    if command.as_deref().is_some_and(message::amends) {
+        let message_kept = message.is_none();
+        if message_kept {
+            // Without -m, git keeps the message of HEAD or of the -C revision.
+            let rev = command
+                .as_deref()
+                .and_then(message::reused_message_rev)
+                .unwrap_or_else(|| "HEAD".to_string());
+            message = message::from_raw(&git(&["log", "-1", "--format=%B", &rev])?);
+        }
+        amend = Some(Amend {
+            head: git(&["log", "-1", "--format=%h %s"])?,
+            stat: git(&["show", "--stat", "--format=", "HEAD"])?,
+            message_kept,
+        });
+    }
     let ascii_issues = message.as_ref().map(|m| AsciiIssues {
         subject: message::non_printable_ascii(&m.subject),
         body: message::non_printable_ascii(&m.body),
@@ -87,6 +116,7 @@ fn context() -> Result<Context, String> {
         command,
         message,
         ascii_issues,
+        amend,
     })
 }
 

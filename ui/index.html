@@ -15,6 +15,7 @@
   mark.bad { background: #d1242f; color: #fff; border-radius: 3px; padding: 0 2px; }
   pre { margin: 0; padding: 8px 12px; overflow: auto; border-radius: 8px; background: rgba(127,127,127,.12); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
   pre.body { margin-top: 6px; max-height: 160px; }
+  #amend-stat { max-height: 120px; }
   pre.err { color: #d1242f; }
   .muted { opacity: .6; font-style: italic; }
   section.files { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -31,7 +32,7 @@
 </style>
 </head>
 <body>
-  <h1>Claude wants to commit</h1>
+  <h1 id="title">Claude wants to commit</h1>
   <div class="repo" id="repo">...</div>
 
   <section id="message">
@@ -40,8 +41,13 @@
     <pre class="body" id="body" hidden></pre>
   </section>
 
+  <section id="amend" hidden>
+    <div class="label">Already in HEAD <span class="opt" id="amend-head"></span></div>
+    <pre id="amend-stat"></pre>
+  </section>
+
   <section class="files">
-    <div class="label">Files</div>
+    <div class="label" id="files-label">Files</div>
     <pre id="status">Reading git status...</pre>
   </section>
 
@@ -105,9 +111,19 @@
   };
 
   $("reason").focus();
-  invoke("context").then(({ repo, status, command, message, ascii_issues }) => {
+  invoke("context").then(({ repo, status, command, message, ascii_issues, amend }) => {
     $("repo").textContent = repo;
-    $("status").textContent = status || "(no changes)";
+    let noChanges = "(no changes)";
+    if (amend) {
+      $("title").textContent = "Claude wants to amend " + amend.head.split(" ")[0];
+      $("amend-head").textContent = amend.head;
+      $("amend-stat").textContent = amend.stat;
+      $("amend").hidden = false;
+      $("message-label").textContent = amend.message_kept ? "Commit message (kept as is)" : "Commit message (replaces the current one)";
+      $("files-label").textContent = "Working tree";
+      noChanges = "(none: message or metadata only)";
+    }
+    $("status").textContent = status || noChanges;
     if (command) {
       $("command").textContent = command;
       $("raw").hidden = false;
