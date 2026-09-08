@@ -3,11 +3,15 @@
 // shared helpers it calls at click time.
 
 let files = [];        // FileDiff[] from the binary, each with a flat line list
-let comments = [];     // { file, start, end, text, box }
+let comments = [];     // { file, start, end, text, box }; start = FILE for a file comment
 let drag = null;       // { file, start, end } while lines are being selected
 let reviewOpen = false;
 const rows = new Map(); // "file:index" -> line <tr>
+const boxes = [];       // file index -> .file element
+const treeItems = [];   // file index -> <li> in the tree
+const viewed = new Set();
 
+const FILE = -1;
 const MARK = { context: " ", add: "+", del: "-" };
 const SCOPE_LABEL = {
   staged: "Staged changes only: plain git commit",
@@ -15,7 +19,10 @@ const SCOPE_LABEL = {
   worktree: "Working tree, untracked files included: git add runs first",
 };
 const SUMMARY_SIZE = { width: 620, height: 680 };
-const REVIEW_SIZE = { width: 1100, height: 820 };
+const REVIEW_SIZE = { width: 1280, height: 860 };
+const SVG = "http://www.w3.org/2000/svg";
+const CHEVRON = "M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.939l3.72-3.719a.749.749 0 0 1 1.06 0Z";
+const BUBBLE = "M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z";
 
 const el = (tag, className, text) => {
   const e = document.createElement(tag);
@@ -28,6 +35,17 @@ const button = (label, onClick, className) => {
   b.type = "button";
   b.onclick = onClick;
   return b;
+};
+const icon = (path) => {
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  const p = document.createElementNS(SVG, "path");
+  p.setAttribute("d", path);
+  p.setAttribute("fill", "currentColor");
+  svg.append(p);
+  return svg;
 };
 
 async function toggleReview() {
@@ -49,26 +67,47 @@ async function loadReview() {
   }
   files.forEach((f) => { f.flat = f.hunks.flatMap((h) => h.lines); });
   $("review-scope").textContent = SCOPE_LABEL[scope] || "";
-  $("review-count").textContent = files.length + (files.length === 1 ? " file" : " files");
   $("files").textContent = "";
   $("files").classList.toggle("empty", !files.length);
   if (!files.length) $("files").textContent = "(nothing to commit in this scope)";
   files.forEach((f, i) => $("files").append(renderFile(f, i)));
+  renderTree();
+  updateViewed();
 }
 
 function renderFile(file, fi) {
   const box = el("div", "file");
+  boxes[fi] = box;
   const head = el("div", "file-head");
+  const chevron = button(null, () => box.classList.toggle("collapsed"), "chevron");
+  chevron.append(icon(CHEVRON));
+  chevron.title = "Collapse or expand";
   const added = file.flat.filter((l) => l.kind === "add").length;
   const removed = file.flat.filter((l) => l.kind === "del").length;
   const counts = el("span", "file-counts");
   counts.append(el("span", "add", "+" + added), " ", el("span", "del", "-" + removed));
+  const viewedLabel = el("label", "viewed-label");
+  const check = el("input");
+  check.type = "checkbox";
+  check.onchange = () => {
+    if (check.checked) viewed.add(fi); else viewed.delete(fi);
+    box.classList.toggle("collapsed", check.checked);
+    treeItems[fi].classList.toggle("viewed", check.checked);
+    updateViewed();
+  };
+  viewedLabel.append(check, "Viewed");
+  const comment = button(null, () => openForm(fi, FILE, FILE), "file-comment");
+  comment.append(icon(BUBBLE));
+  comment.title = "Comment on this file";
   head.append(
+    chevron,
     el("span", "file-status " + file.status, file.status),
     el("span", "file-path", file.old_path ? file.old_path + " -> " + file.path : file.path),
     counts,
+    viewedLabel,
+    comment,
   );
-  box.append(head);
+  box.append(head, el("div", "file-comments"));
   if (file.binary) {
     box.append(el("div", "file-note", "Binary file, no diff."));
     return box;
@@ -111,6 +150,62 @@ function renderLine(line, fi, idx) {
   return tr;
 }
 
+// Sidebar: directories as collapsible groups, files that scroll to their diff.
+function renderTree() {
+  const root = { dirs: new Map(), files: [] };
+  files.forEach((f, i) => {
+    const parts = f.path.split("/");
+    let node = root;
+    parts.slice(0, -1).forEach((dir) => {
+      if (!node.dirs.has(dir)) node.dirs.set(dir, { dirs: new Map(), files: [] });
+      node = node.dirs.get(dir);
+    });
+    node.files.push({ name: parts.at(-1), index: i });
+  });
+  $("tree").textContent = "";
+  $("tree").append(renderTreeNode(root));
+}
+
+function renderTreeNode(node) {
+  const ul = el("ul", "tree-level");
+  [...node.dirs.keys()].sort().forEach((name) => {
+    const details = el("details");
+    details.open = true;
+    details.append(el("summary", "tree-dir", name), renderTreeNode(node.dirs.get(name)));
+    const li = el("li");
+    li.append(details);
+    ul.append(li);
+  });
+  node.files.sort((a, b) => a.name.localeCompare(b.name)).forEach(({ name, index }) => {
+    const li = el("li", "tree-file");
+    li.append(button(name, () => reveal(index)));
+    treeItems[index] = li;
+    ul.append(li);
+  });
+  return ul;
+}
+
+function reveal(fi) {
+  boxes[fi].classList.remove("collapsed");
+  boxes[fi].scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+function filterFiles(query) {
+  const q = query.trim().toLowerCase();
+  files.forEach((f, i) => {
+    const hidden = Boolean(q) && !f.path.toLowerCase().includes(q);
+    boxes[i].hidden = hidden;
+    treeItems[i].hidden = hidden;
+  });
+  document.querySelectorAll("#tree details").forEach((d) => {
+    d.parentElement.hidden = !d.querySelector("li.tree-file:not([hidden])");
+  });
+}
+
+function updateViewed() {
+  $("review-count").textContent = viewed.size + " / " + files.length + " viewed";
+}
+
 document.addEventListener("mouseup", () => {
   if (!drag) return;
   const { file, start, end } = drag;
@@ -125,8 +220,9 @@ function highlight() {
   for (let i = a; i <= b; i++) rows.get(drag.file + ":" + i)?.classList.add("selected");
 }
 
-// The cell under a line where its comments and forms live.
+// Where the comments and forms of a line, or of the whole file, live.
 function commentCell(fi, idx) {
+  if (idx === FILE) return boxes[fi].querySelector(".file-comments");
   const line = rows.get(fi + ":" + idx);
   let row = line.nextElementSibling;
   if (!row || !row.classList.contains("comment-row")) {
@@ -140,6 +236,7 @@ function commentCell(fi, idx) {
 }
 
 function pruneRow(fi, idx) {
+  if (idx === FILE) return;
   const row = rows.get(fi + ":" + idx).nextElementSibling;
   if (row && row.classList.contains("comment-row") && !row.firstElementChild.childElementCount) row.remove();
 }
@@ -154,10 +251,12 @@ function markCommented() {
 }
 
 function where(fi, start, end) {
+  if (start === FILE) return files[fi].path + " (file comment)";
   return files[fi].path + ":" + lineRef(files[fi].flat.slice(start, end + 1));
 }
 
 function openForm(fi, start, end, existing) {
+  boxes[fi].classList.remove("collapsed");
   const form = el("div", "comment-form");
   const ta = el("textarea");
   ta.rows = 3;
@@ -223,6 +322,7 @@ function lineRef(lines) {
 // The pending comments as text for Claude: where, the quoted lines, the note.
 function reviewText() {
   return comments.map((c) => {
+    if (c.start === FILE) return where(c.file, FILE, FILE) + "\n" + c.text;
     const lines = files[c.file].flat.slice(c.start, c.end + 1);
     const quoted = lines.map((l) => "> " + MARK[l.kind] + l.text).join("\n");
     return where(c.file, c.start, c.end) + "\n" + quoted + "\n" + c.text;

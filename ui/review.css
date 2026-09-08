@@ -1,22 +1,45 @@
 /* Review view: the diff with line comments, in the style of a GitHub
    "Files changed" tab. */
 
-#summary, #review { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+#summary { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+#review { flex: 1; min-height: 0; display: flex; gap: 16px; }
 #summary[hidden], #review[hidden] { display: none; }
 
+#tree-pane { width: 230px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+#filter { width: 100%; box-sizing: border-box; padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(127,127,127,.35); background: rgba(127,127,127,.08); color: inherit; font: inherit; font-size: 13px; }
+#tree { flex: 1; overflow: auto; font-size: 13px; }
+ul.tree-level { list-style: none; margin: 0; padding-left: 14px; }
+#tree > ul.tree-level { padding-left: 0; }
+summary.tree-dir { cursor: pointer; padding: 3px 4px; border-radius: 6px; }
+summary.tree-dir:hover { background: rgba(127,127,127,.12); }
+li.tree-file button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 3px 6px 3px 22px; border-radius: 6px; font: inherit; font-size: 13px; }
+li.tree-file button:hover { background: rgba(127,127,127,.12); }
+li.tree-file.viewed button { opacity: .5; }
+li.tree-file.viewed button::after { content: " \2713"; }
+
+#diff-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .review-head { display: flex; gap: 14px; align-items: baseline; font-size: 12px; opacity: .8; }
 #files { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
 #files.empty { opacity: .6; font-style: italic; }
 
 .file { border: 1px solid rgba(127,127,127,.35); border-radius: 8px; overflow-x: auto; flex-shrink: 0; }
-.file-head { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: rgba(127,127,127,.12); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; position: sticky; left: 0; }
+.file-head { display: flex; gap: 10px; align-items: center; padding: 6px 12px; background: rgba(127,127,127,.12); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; position: sticky; left: 0; }
+.file-head .chevron, .file-head .file-comment { display: inline-flex; padding: 3px; border: 0; background: none; opacity: .7; }
+.file-head .chevron:hover, .file-head .file-comment:hover { opacity: 1; background: rgba(127,127,127,.15); }
+.file-head .chevron svg { transition: transform .15s; }
+.file.collapsed .chevron svg { transform: rotate(-90deg); }
+.file.collapsed > table, .file.collapsed > .file-note, .file.collapsed > .file-comments { display: none; }
+.viewed-label { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid rgba(127,127,127,.4); border-radius: 6px; font: 12px -apple-system, system-ui, sans-serif; cursor: pointer; }
+.viewed-label input { margin: 0; }
+.file-comments { padding: 8px 12px 0; background: rgba(127,127,127,.06); }
+.file-comments:empty { display: none; }
 .file-status { text-transform: uppercase; font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid currentColor; }
 .file-status.added { color: #1a7f37; }
 .file-status.deleted { color: #cf222e; }
 .file-status.renamed { color: #8250df; }
 .file-status.modified { color: #9a6700; }
 .file-path { font-weight: 600; }
-.file-counts { margin-left: auto; }
+.file-counts { margin-left: auto; margin-right: 6px; }
 .file-counts .add { color: #1a7f37; }
 .file-counts .del { color: #cf222e; }
 .file-note { padding: 10px 12px; font-size: 12px; opacity: .7; }

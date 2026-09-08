@@ -43,9 +43,12 @@ The exit code is the binary's own. In a shell wrapper such as
 "Review changes" swaps the summary for the diff of what the commit will
 contain: the index for a plain `git commit`, tracked files for `-a`, the
 whole working tree when a `git add` runs first; against HEAD~1 for an
-amend. Lines are numbered on both sides. The "+" on a line opens a
-comment; dragging it selects a range. Comments stay pending and editable
-until Deny, which sends them to Claude after the deny reason, each as:
+amend. A file tree with a filter sits on the left; each file collapses,
+takes a file-level comment, and can be marked Viewed, which collapses it
+and counts it. Lines are numbered on both sides. The "+" on a line opens
+a comment; dragging it selects a range. Comments stay pending and
+editable until Deny, which sends them to Claude after the deny reason,
+each as:
 
     src/main.rs:L42-L45
     > -old line

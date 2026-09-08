@@ -60,8 +60,14 @@
   </div>
 
   <div id="review" hidden>
-    <div class="review-head"><span id="review-scope"></span><span id="review-count"></span></div>
-    <div id="files"></div>
+    <aside id="tree-pane">
+      <input id="filter" type="search" placeholder="Filter files..." oninput="filterFiles(this.value)">
+      <div id="tree"></div>
+    </aside>
+    <div id="diff-main">
+      <div class="review-head"><span id="review-scope"></span><span id="review-count"></span></div>
+      <div id="files"></div>
+    </div>
   </div>
 
   <section class="reason">
