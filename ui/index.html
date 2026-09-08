@@ -11,7 +11,7 @@
   .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; opacity: .6; margin-bottom: 4px; }
   .label .opt { text-transform: none; letter-spacing: 0; }
   .subject { font-weight: 600; font-size: 15px; padding: 8px 12px; border-radius: 8px; background: rgba(127,127,127,.12); white-space: pre-wrap; word-break: break-word; }
-  .badge { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 10px; background: #d1242f; color: #fff; font-size: 10px; letter-spacing: 0; text-transform: none; }
+  button.badge { margin-left: 8px; padding: 1px 7px; border: 0; border-radius: 10px; background: #d1242f; color: #fff; font-size: 10px; letter-spacing: 0; text-transform: none; vertical-align: middle; }
   mark.bad { background: #d1242f; color: #fff; border-radius: 3px; padding: 0 2px; }
   pre { margin: 0; padding: 8px 12px; overflow: auto; border-radius: 8px; background: rgba(127,127,127,.12); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
   pre.body { margin-top: 6px; max-height: 160px; }
@@ -102,11 +102,21 @@
     });
     flush();
   };
+  // Appends a line to the deny reason, on its own line.
+  const appendReason = (line) => {
+    const r = $("reason");
+    if (r.value && !r.value.endsWith("\n")) r.value += "\n";
+    r.value += line + "\n";
+    r.focus();
+  };
   const badge = (name, count) => {
     if (!count) return;
-    const b = document.createElement("span");
+    const b = document.createElement("button");
+    b.type = "button";
     b.className = "badge";
     b.textContent = name + ": " + count + " non-ASCII";
+    b.title = "Add to the deny reason";
+    b.onclick = () => appendReason(b.textContent);
     $("message-label").appendChild(b);
   };
 
