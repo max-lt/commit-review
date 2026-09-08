@@ -14,17 +14,19 @@ through `~/.zshrc`, so there is nothing to install.
 
 ## Binary contract
 
-    commit-review [--command "<intercepted shell command>"]
-    commit-review --is-commit "<shell command>"
+    commit-review hook
+    commit-review [--command "<shell command>"]
 
-The first form runs inside a git repository, opens the window and exits on
-the decision. With `--command`, it extracts the commit message (`-m`,
-`--message`, `-am`, `$(cat <<'EOF' ... EOF)` heredoc) and shows it;
-without, it is a manual launch and only the file list is shown.
+`hook` is the Claude Code PreToolUse entry point. It reads the event JSON
+on stdin and exits 0 at once unless the command runs `git commit` itself;
+a mention inside a quoted string or a heredoc body does not count. Then it
+opens the window in the event's cwd. Deny prints the hook's JSON answer
+with the reason. A crash denies as well.
 
-The second form opens no window: it exits 0 when the command runs
-`git commit` itself, 1 when it only mentions it inside a quoted string or
-a heredoc body, or not at all. Parser: `src/message.rs`.
+The second form is a manual launch inside a git repository. With
+`--command`, it extracts the commit message (`-m`, `--message`, `-am`,
+`$(cat <<'EOF' ... EOF)` heredoc) and shows it; without, only the file
+list is shown. Parser: `src/message.rs`.
 
 | Decision              | stdout     | exit  |
 | --------------------- | ---------- | ----- |
@@ -38,21 +40,16 @@ The exit code is the binary's own. In a shell wrapper such as
 
 ## Claude Code hook
 
-`hooks/review-before-commit.sh` is a PreToolUse hook on the Bash tool.
-It asks the binary whether the command runs `git commit`; if so, it opens
-the window and denies the commit with the reason when the exit code is 10.
-
-Register it in `~/.claude/settings.json` for every session, or in a
-project's `.claude/settings.json` for that project only:
+Register the binary as a PreToolUse hook on the Bash tool, in
+`~/.claude/settings.json` for every session or in a project's
+`.claude/settings.json` for that project only:
 
     "hooks": {
       "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command",
-        "command": "/Users/max/Documents/projects/commit-review/hooks/review-before-commit.sh",
+        "command": "/Users/max/Documents/projects/commit-review/target/release/commit-review hook",
         "timeout": 3600 }] }]
     }
 
-Rebuild the binary before changing the hook script: the script is read on
-every Bash call of every session, and an old binary given a new flag opens
-the window instead of answering. The gate fails closed: without the binary,
-every command mentioning `git commit` is denied with a message saying to
-rebuild.
+Settings changes reach running sessions. If the binary is missing, which
+only `cargo clean` does, Claude Code reports a hook error and lets commits
+through: rebuild.
