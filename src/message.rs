@@ -37,7 +37,42 @@ pub fn non_printable_ascii(text: &str) -> Vec<NonAscii> {
 /// True when the command runs `git commit` itself, as opposed to merely
 /// mentioning it inside a quoted string or a heredoc body.
 pub fn is_git_commit(cmd: &str) -> bool {
-    commit_index(&shell_words(&strip_heredocs(cmd))).is_some()
+    subcommand_index(&shell_words(&strip_heredocs(cmd)), "commit").is_some()
+}
+
+/// What the commit will contain.
+#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum Scope {
+    /// The index only: a plain `git commit`.
+    Staged,
+    /// Tracked files as they are: `git commit -a`.
+    Tracked,
+    /// Everything, untracked files included: a `git add` runs first. A
+    /// `git add` with paths is read the same way, which shows too much
+    /// rather than too little.
+    Worktree,
+}
+
+pub fn scope(cmd: &str) -> Scope {
+    let words = shell_words(&strip_heredocs(cmd));
+    if subcommand_index(&words, "add").is_some() {
+        return Scope::Worktree;
+    }
+    let all = commit_options(cmd).iter().any(|w| {
+        w == "--all" || (w.starts_with('-') && !w.starts_with("--") && short_flags(w).contains('a'))
+    });
+    if all {
+        Scope::Tracked
+    } else {
+        Scope::Staged
+    }
+}
+
+/// The flag letters of a short option cluster, without the value glued
+/// after `m`.
+fn short_flags(word: &str) -> &str {
+    word[1..].split('m').next().unwrap()
 }
 
 /// True when the command rewrites HEAD with `--amend`.
@@ -67,14 +102,14 @@ pub fn reused_message_rev(cmd: &str) -> Option<String> {
 /// Words after the `commit` subcommand, heredoc bodies stripped.
 fn commit_options(cmd: &str) -> Vec<String> {
     let words = shell_words(&strip_heredocs(cmd));
-    match commit_index(&words) {
+    match subcommand_index(&words, "commit") {
         Some(i) => words[i + 1..].to_vec(),
         None => Vec::new(),
     }
 }
 
-/// Index of the `commit` word when the words run `git commit`.
-fn commit_index(words: &[String]) -> Option<usize> {
+/// Index of the subcommand word when the words run `git <name>`.
+fn subcommand_index(words: &[String], name: &str) -> Option<usize> {
     for (i, w) in words.iter().enumerate() {
         if w != "git" {
             continue;
@@ -84,7 +119,7 @@ fn commit_index(words: &[String]) -> Option<usize> {
             // `-C <path>` and `-c <key=value>` take a value.
             j += if words[j] == "-C" || words[j] == "-c" { 2 } else { 1 };
         }
-        if words.get(j).is_some_and(|w| w == "commit") {
+        if words.get(j).is_some_and(|w| w == name) {
             return Some(j);
         }
     }
@@ -424,6 +459,16 @@ mod tests {
         assert_eq!(reused_message_rev("git commit --amend -C HEAD~1"), Some("HEAD~1".into()));
         assert_eq!(reused_message_rev("git commit --reuse-message=abc123"), Some("abc123".into()));
         assert_eq!(reused_message_rev("git -c user.name=me commit --amend"), None);
+    }
+
+    #[test]
+    fn scope_from_git_add_and_dash_a() {
+        assert_eq!(scope("git commit -m x"), Scope::Staged);
+        assert_eq!(scope("git commit -mabc"), Scope::Staged);
+        assert_eq!(scope("git commit -am x"), Scope::Tracked);
+        assert_eq!(scope("git commit --all -m x"), Scope::Tracked);
+        assert_eq!(scope("git add -A && git commit -m x"), Scope::Worktree);
+        assert_eq!(scope("git add src && git commit -m x"), Scope::Worktree);
     }
 
     #[test]

@@ -5,11 +5,13 @@
 //!                                     event JSON on stdin, answers on stdout
 //!   commit-review [--command <cmd>]   manual launch: exit 0 = accept,
 //!                                     exit 10 = deny with the reason on stdout
+//!   --view review                     open on the diff instead of the summary
 
+mod diff;
+mod git;
 mod message;
 
 use std::io::{Read, Write};
-use std::process::Command;
 
 use tauri::Manager;
 
@@ -35,6 +37,8 @@ struct Review {
 struct Context {
     repo: String,
     status: String,
+    /// The reviewer, from git config, for the comment boxes.
+    user: String,
     /// The command Claude is about to run, when known.
     command: Option<String>,
     message: Option<message::CommitMessage>,
@@ -42,6 +46,9 @@ struct Context {
     ascii_issues: Option<AsciiIssues>,
     /// The commit being rewritten by `--amend`, if any.
     amend: Option<Amend>,
+    scope: message::Scope,
+    /// `--view review` opens the diff instead of the summary.
+    view: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -107,17 +114,6 @@ fn deny(output: Output, reason: &str) -> ! {
     std::process::exit(code)
 }
 
-fn git(args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
-        .args(args)
-        .output()
-        .map_err(|e| format!("git not found: {e}"))?;
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
-}
-
 /// Value of `--<name> <value>` or `--<name>=<value>` on the command line.
 fn flag_value(name: &str) -> Option<String> {
     let flag = format!("--{name}");
@@ -131,6 +127,11 @@ fn flag_value(name: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// A manual launch has no command: show the whole working tree.
+fn scope_of(command: Option<&str>) -> message::Scope {
+    command.map_or(message::Scope::Worktree, message::scope)
 }
 
 /// What the window shows.
@@ -147,11 +148,11 @@ fn context(review: tauri::State<Review>) -> Result<Context, String> {
                 .as_deref()
                 .and_then(message::reused_message_rev)
                 .unwrap_or_else(|| "HEAD".to_string());
-            message = message::from_raw(&git(&["log", "-1", "--format=%B", &rev])?);
+            message = message::from_raw(&git::run(&["log", "-1", "--format=%B", &rev])?);
         }
         amend = Some(Amend {
-            head: git(&["log", "-1", "--format=%h %s"])?,
-            stat: git(&["show", "--stat", "--format=", "HEAD"])?,
+            head: git::run(&["log", "-1", "--format=%h %s"])?,
+            stat: git::run(&["show", "--stat", "--format=", "HEAD"])?,
             message_kept,
         });
     }
@@ -160,13 +161,32 @@ fn context(review: tauri::State<Review>) -> Result<Context, String> {
         body: message::non_printable_ascii(&m.body),
     });
     Ok(Context {
-        repo: git(&["rev-parse", "--show-toplevel"])?,
-        status: git(&["status", "--short"])?,
+        repo: git::run(&["rev-parse", "--show-toplevel"])?,
+        status: git::run(&["status", "--short"])?,
+        user: git::run(&["config", "user.name"]).unwrap_or_else(|_| "You".to_string()),
+        scope: scope_of(command.as_deref()),
+        view: flag_value("view"),
         command,
         message,
         ascii_issues,
         amend,
     })
+}
+
+/// The changes the commit will contain.
+#[tauri::command]
+fn changes(review: tauri::State<Review>) -> Result<Vec<diff::FileDiff>, String> {
+    let command = review.command.as_deref();
+    diff::changes(scope_of(command), command.is_some_and(message::amends))
+}
+
+/// Resizes and re-centers the window, for the wider review view.
+#[tauri::command]
+fn resize(window: tauri::WebviewWindow, width: f64, height: f64) -> Result<(), String> {
+    window
+        .set_size(tauri::LogicalSize::new(width, height))
+        .and_then(|_| window.center())
+        .map_err(|e| e.to_string())
 }
 
 /// The reviewer's decision.
@@ -181,7 +201,7 @@ fn decide(review: tauri::State<Review>, accept: bool, reason: String) {
 fn review(command: Option<String>, output: Output) -> ! {
     let app = tauri::Builder::default()
         .manage(Review { command, output })
-        .invoke_handler(tauri::generate_handler![context, decide])
+        .invoke_handler(tauri::generate_handler![context, changes, resize, decide])
         .setup(|app| {
             // Started by a hook, with no terminal: the window has to take
             // focus itself, or it opens behind the terminal.

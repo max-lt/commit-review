@@ -38,6 +38,22 @@ list is shown. Parser: `src/message.rs`.
 The exit code is the binary's own. In a shell wrapper such as
 `commit-review; echo $?`, the echo returns 0, not the binary.
 
+## Review view
+
+"Review changes" swaps the summary for the diff of what the commit will
+contain: the index for a plain `git commit`, tracked files for `-a`, the
+whole working tree when a `git add` runs first; against HEAD~1 for an
+amend. Lines are numbered on both sides. The "+" on a line opens a
+comment; dragging it selects a range. Comments stay pending and editable
+until Deny, which sends them to Claude after the deny reason, each as:
+
+    src/main.rs:L42-L45
+    > -old line
+    > +new line
+    the comment
+
+`--view review` opens the window on that view.
+
 ## Claude Code hook
 
 Register the binary as a PreToolUse hook on the Bash tool, in

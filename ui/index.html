@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Commit review</title>
+<link rel="stylesheet" href="review.css">
 <style>
   :root { color-scheme: light dark; font: 14px/1.45 -apple-system, system-ui, sans-serif; }
   body { margin: 0; padding: 18px 24px; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
@@ -35,26 +36,33 @@
   <h1 id="title">Claude wants to commit</h1>
   <div class="repo" id="repo">...</div>
 
-  <section id="message">
-    <div class="label" id="message-label">Commit message</div>
-    <div class="subject" id="subject">...</div>
-    <pre class="body" id="body" hidden></pre>
-  </section>
+  <div id="summary">
+    <section id="message">
+      <div class="label" id="message-label">Commit message</div>
+      <div class="subject" id="subject">...</div>
+      <pre class="body" id="body" hidden></pre>
+    </section>
 
-  <section id="amend" hidden>
-    <div class="label">Already in HEAD <span class="opt" id="amend-head"></span></div>
-    <pre id="amend-stat"></pre>
-  </section>
+    <section id="amend" hidden>
+      <div class="label">Already in HEAD <span class="opt" id="amend-head"></span></div>
+      <pre id="amend-stat"></pre>
+    </section>
 
-  <section class="files">
-    <div class="label" id="files-label">Files</div>
-    <pre id="status">Reading git status...</pre>
-  </section>
+    <section class="files">
+      <div class="label" id="files-label">Files</div>
+      <pre id="status">Reading git status...</pre>
+    </section>
 
-  <details id="raw" hidden>
-    <summary>Exact command</summary>
-    <pre id="command"></pre>
-  </details>
+    <details id="raw" hidden>
+      <summary>Exact command</summary>
+      <pre id="command"></pre>
+    </details>
+  </div>
+
+  <div id="review" hidden>
+    <div class="review-head"><span id="review-scope"></span><span id="review-count"></span></div>
+    <div id="files"></div>
+  </div>
 
   <section class="reason">
     <div class="label">Deny reason <span class="opt">(optional, read by Claude)</span></div>
@@ -62,98 +70,12 @@
   </section>
 
   <div class="actions">
+    <span id="pending-count"></span>
+    <button id="toggle-review">Review changes</button>
     <button class="deny" id="deny">Deny<kbd>esc</kbd></button>
     <button class="accept" id="accept">Accept<kbd>cmd+enter</kbd></button>
   </div>
-<script>
-  const { invoke } = window.__TAURI__.core;
-  const DEFAULT_DENY = "Commit denied by human review, no reason given. Do not retry the commit: ask Max what should change.";
-  const $ = (id) => document.getElementById(id);
-
-  const denyReason = () => {
-    const text = $("reason").value.trim();
-    return text ? "Commit denied by human review. Reason:\n" + text : DEFAULT_DENY;
-  };
-  const decide = (accept) => invoke("decide", { accept, reason: accept ? "" : denyReason() });
-  $("accept").onclick = () => decide(true);
-  $("deny").onclick = () => decide(false);
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") decide(false);
-    if (e.key === "Enter" && e.metaKey) decide(true);
-  });
-
-  // Renders text with each reported character wrapped in a <mark>; characters
-  // that would be invisible (controls, exotic spaces) show their code point.
-  const render = (el, text, issues) => {
-    el.textContent = "";
-    const bad = new Map(issues.map((i) => [i.index, i.code]));
-    let run = "";
-    const flush = () => { if (run) { el.appendChild(document.createTextNode(run)); run = ""; } };
-    [...text].forEach((ch, i) => {
-      if (!bad.has(i)) { run += ch; return; }
-      flush();
-      const code = bad.get(i);
-      const hex = "U+" + code.toString(16).toUpperCase().padStart(4, "0");
-      const m = document.createElement("mark");
-      m.className = "bad";
-      m.title = hex;
-      m.textContent = (code < 33 || code === 127 || /\s/.test(ch)) ? "<" + hex + ">" : ch;
-      el.appendChild(m);
-    });
-    flush();
-  };
-  // Appends a line to the deny reason, on its own line.
-  const appendReason = (line) => {
-    const r = $("reason");
-    if (r.value && !r.value.endsWith("\n")) r.value += "\n";
-    r.value += line + "\n";
-    r.focus();
-  };
-  const badge = (name, count) => {
-    if (!count) return;
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "badge";
-    b.textContent = name + ": " + count + " non-ASCII";
-    b.title = "Add to the deny reason";
-    b.onclick = () => appendReason(b.textContent);
-    $("message-label").appendChild(b);
-  };
-
-  $("reason").focus();
-  invoke("context").then(({ repo, status, command, message, ascii_issues, amend }) => {
-    $("repo").textContent = repo;
-    let noChanges = "(no changes)";
-    if (amend) {
-      $("title").textContent = "Claude wants to amend " + amend.head.split(" ")[0];
-      $("amend-head").textContent = amend.head;
-      $("amend-stat").textContent = amend.stat;
-      $("amend").hidden = false;
-      $("message-label").textContent = amend.message_kept ? "Commit message (kept as is)" : "Commit message (replaces the current one)";
-      $("files-label").textContent = "Working tree";
-      noChanges = "(none: message or metadata only)";
-    }
-    $("status").textContent = status || noChanges;
-    if (command) {
-      $("command").textContent = command;
-      $("raw").hidden = false;
-    }
-    if (message) {
-      render($("subject"), message.subject, ascii_issues.subject);
-      badge("subject", ascii_issues.subject.length);
-      if (message.body) {
-        render($("body"), message.body, ascii_issues.body);
-        badge("body", ascii_issues.body.length);
-        $("body").hidden = false;
-      }
-    } else {
-      $("subject").textContent = command ? "(message not recognized, see the exact command)" : "(manual launch, no command given)";
-      $("subject").classList.add("muted");
-    }
-  }).catch((e) => {
-    $("status").textContent = "git error: " + e;
-    $("status").classList.add("err");
-  });
-</script>
+<script src="review.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
