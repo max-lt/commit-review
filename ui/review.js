@@ -8,6 +8,7 @@ let drag = null;       // { file, start, end } while lines are being selected
 let reviewOpen = false;
 const rows = new Map(); // "file:index" -> line <tr>
 const boxes = [];       // file index -> .file element
+const checks = [];      // file index -> Viewed checkbox
 const treeItems = [];   // file index -> <li> in the tree
 const viewed = new Set();
 
@@ -70,7 +71,69 @@ async function loadReview() {
   if (!files.length) $("files").textContent = "(nothing to commit in this scope)";
   files.forEach((f, i) => $("files").append(renderFile(f, i)));
   renderTree();
+  files.forEach((f, i) => {
+    if (f.viewed) setViewed(i, true);
+    f.restored.forEach((r) => restore(i, r));
+  });
   updateViewed();
+  markCommented();
+}
+
+function setViewed(fi, on) {
+  checks[fi].checked = on;
+  if (on) viewed.add(fi); else viewed.delete(fi);
+  boxes[fi].classList.toggle("collapsed", on);
+  treeItems[fi].classList.toggle("viewed", on);
+  updateViewed();
+}
+
+// A comment from an earlier attempt: back in place while its lines are
+// unchanged, otherwise shown as outdated and not sent unless reopened.
+function restore(fi, r) {
+  if (r.anchor === "outdated") {
+    renderOutdated(fi, r);
+    return;
+  }
+  const c = r.anchor === "lines"
+    ? { file: fi, start: r.start, end: r.end, text: r.text, earlier: true }
+    : { file: fi, start: FILE, end: FILE, text: r.text, earlier: true };
+  comments.push(c);
+  renderComment(c);
+}
+
+function renderOutdated(fi, r) {
+  const box = el("div", "comment outdated");
+  const head = el("div", "comment-head");
+  head.append(el("span", "author", user), el("span", "tag outdated", "Outdated"), el("span", "where", files[fi].path));
+  box.append(head);
+  if (r.quote.length) box.append(el("pre", "quote", r.quote.join("\n")));
+  const actions = el("div", "comment-actions");
+  actions.append(
+    button("Dismiss", () => box.remove()),
+    button("Reopen", () => {
+      box.remove();
+      const c = { file: fi, start: FILE, end: FILE, text: r.text };
+      comments.push(c);
+      renderComment(c);
+      markCommented();
+    }),
+  );
+  box.append(el("div", "comment-body", r.text), actions);
+  commentCell(fi, FILE).append(box);
+}
+
+// What to keep for the next attempt; null when the diff was never opened.
+function reviewState() {
+  if (!files.length) return null;
+  return files.map((f, i) => ({
+    path: f.path,
+    viewed: viewed.has(i),
+    comments: comments.filter((c) => c.file === i).map((c) => ({
+      start: c.start === FILE ? null : c.start,
+      end: c.end === FILE ? null : c.end,
+      text: c.text,
+    })),
+  }));
 }
 
 function renderFile(file, fi) {
@@ -87,12 +150,8 @@ function renderFile(file, fi) {
   const viewedLabel = el("label", "viewed-label");
   const check = el("input");
   check.type = "checkbox";
-  check.onchange = () => {
-    if (check.checked) viewed.add(fi); else viewed.delete(fi);
-    box.classList.toggle("collapsed", check.checked);
-    treeItems[fi].classList.toggle("viewed", check.checked);
-    updateViewed();
-  };
+  check.onchange = () => setViewed(fi, check.checked);
+  checks[fi] = check;
   viewedLabel.append(check, "Viewed");
   const comment = button(null, () => openForm(fi, FILE, FILE), "file-comment");
   comment.append(icon(BUBBLE));
@@ -293,7 +352,9 @@ function openForm(fi, start, end, existing) {
 function renderComment(c) {
   const box = el("div", "comment");
   const head = el("div", "comment-head");
-  head.append(el("span", "author", user), el("span", "pending", "Pending"), el("span", "where", where(c.file, c.start, c.end)));
+  head.append(el("span", "author", user), el("span", "tag pending", "Pending"));
+  if (c.earlier) head.append(el("span", "tag earlier", "Earlier round"));
+  head.append(el("span", "where", where(c.file, c.start, c.end)));
   const actions = el("div", "comment-actions");
   actions.append(
     button("Edit", () => { box.remove(); openForm(c.file, c.start, c.end, c); }),

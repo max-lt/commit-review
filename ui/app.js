@@ -12,7 +12,7 @@ const decide = (accept) => {
   let text = "";
   if (!accept) text = notes ? "Commit denied by human review. Reason:\n" + notes : DEFAULT_DENY;
   else if (notes) text = "Commit accepted by human review, with notes:\n" + notes;
-  return invoke("decide", { accept, notes: text });
+  return invoke("decide", { accept, notes: text, reviews: reviewState() });
 };
 $("accept").onclick = () => decide(true);
 $("deny").onclick = () => decide(false);

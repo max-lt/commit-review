@@ -67,7 +67,12 @@ tr.comment-row td { padding: 8px 12px 4px 56px; background: rgba(127,127,127,.06
 .comment-head { display: flex; gap: 8px; align-items: center; padding: 6px 12px; background: rgba(127,127,127,.1); border-bottom: 1px solid rgba(127,127,127,.3); font-size: 12px; }
 .comment-head .author { font-weight: 600; }
 .comment-head .where { margin-left: auto; opacity: .6; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.pending { background: #bf8700; color: #fff; border-radius: 10px; padding: 0 7px; font-size: 10px; }
+.tag { color: #fff; border-radius: 10px; padding: 0 7px; font-size: 10px; }
+.tag.pending { background: #bf8700; }
+.tag.earlier { background: #0969da; }
+.tag.outdated { background: #6e7781; }
+.comment.outdated { opacity: .8; }
+.comment .quote { margin: 8px 12px 0; padding: 6px 10px; border-radius: 6px; background: rgba(127,127,127,.12); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; overflow-x: auto; }
 .comment-body { padding: 10px 12px; white-space: pre-wrap; }
 .comment-actions, .form-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 6px 12px 8px; }
 .comment-actions button, .form-actions button { padding: 4px 10px; font-size: 12px; }

@@ -9,8 +9,10 @@
 mod diff;
 mod git;
 mod message;
+mod state;
 
 use std::io::{Read, Write};
+use std::sync::Mutex;
 
 use tauri::Manager;
 
@@ -30,6 +32,18 @@ enum Output {
 struct Review {
     command: Option<String>,
     output: Output,
+    /// The diff as sent to the window, to quote commented lines on save.
+    files: Mutex<Vec<diff::FileDiff>>,
+}
+
+/// A file of the diff with what an earlier attempt left on it.
+#[derive(serde::Serialize)]
+struct Change {
+    #[serde(flatten)]
+    diff: diff::FileDiff,
+    /// Marked viewed earlier and unchanged since.
+    viewed: bool,
+    restored: Vec<state::Restored>,
 }
 
 #[derive(serde::Serialize)]
@@ -183,22 +197,52 @@ fn context(review: tauri::State<Review>) -> Result<Context, String> {
     })
 }
 
-/// The changes the commit will contain.
+/// The changes the commit will contain, with the earlier review of each.
 #[tauri::command]
-fn changes(review: tauri::State<Review>) -> Result<Vec<diff::FileDiff>, String> {
+fn changes(review: tauri::State<Review>) -> Result<Vec<Change>, String> {
     let command = review.command.as_deref();
-    diff::changes(scope_of(command), command.is_some_and(message::amends))
+    let files = diff::changes(scope_of(command), command.is_some_and(message::amends))?;
+    let saved = state::State::load()?;
+    let changes = files
+        .iter()
+        .map(|f| {
+            let (viewed, restored) = saved.restore(f);
+            Change { diff: f.clone(), viewed, restored }
+        })
+        .collect();
+    *review.files.lock().unwrap() = files;
+    Ok(changes)
 }
 
 /// The reviewer's decision, with the notes and comments left in the window.
+/// `reviews` is absent when the diff was never opened: the saved state
+/// then stands as it is.
 #[tauri::command]
-fn decide(review: tauri::State<Review>, accept: bool, notes: String) {
+fn decide(
+    review: tauri::State<Review>,
+    accept: bool,
+    notes: String,
+    reviews: Option<Vec<state::FileReview>>,
+) {
+    let kept = match (accept, reviews) {
+        (true, _) => state::State::clear(),
+        (false, Some(reviews)) => state::State::build(&review.files.lock().unwrap(), reviews).save(),
+        (false, None) => Ok(()),
+    };
+    // Losing the review state is not worth losing the decision.
+    if let Err(e) = kept {
+        eprintln!("commit-review: {e}");
+    }
     finish(review.output, accept, notes.trim())
 }
 
 fn review(command: Option<String>, output: Output) -> ! {
+    // Git paths are shown relative to the root; the cwd may be deeper.
+    if let Ok(root) = git::run(&["rev-parse", "--show-toplevel"]) {
+        std::env::set_current_dir(root).expect("repository root exists");
+    }
     let app = tauri::Builder::default()
-        .manage(Review { command, output })
+        .manage(Review { command, output, files: Mutex::new(Vec::new()) })
         .invoke_handler(tauri::generate_handler![context, changes, decide])
         .setup(|app| {
             // Started by a hook, with no terminal: the window has to take

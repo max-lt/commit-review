@@ -6,7 +6,7 @@ use crate::message::Scope;
 /// Hash of git's empty tree: what a root commit is measured against.
 const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct FileDiff {
     pub path: String,
     /// Previous path of a renamed file.
@@ -16,7 +16,14 @@ pub struct FileDiff {
     pub hunks: Vec<Hunk>,
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy)]
+impl FileDiff {
+    /// All lines of all hunks in order: what the review indexes.
+    pub fn lines(&self) -> impl Iterator<Item = &Line> {
+        self.hunks.iter().flat_map(|h| h.lines.iter())
+    }
+}
+
+#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
     Added,
@@ -25,13 +32,13 @@ pub enum Status {
     Renamed,
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Hunk {
     pub header: String,
     pub lines: Vec<Line>,
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Line {
     pub kind: Kind,
     /// Line number in the old file, absent for an added line.
@@ -41,7 +48,19 @@ pub struct Line {
     pub text: String,
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy)]
+impl Line {
+    /// The line as the diff shows it, marker first.
+    pub fn quoted(&self) -> String {
+        let marker = match self.kind {
+            Kind::Context => ' ',
+            Kind::Add => '+',
+            Kind::Del => '-',
+        };
+        format!("{marker}{}", self.text)
+    }
+}
+
+#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     Context,

@@ -59,6 +59,14 @@ each as:
     > +new line
     the comment
 
+The review carries over between attempts. Its state lives in
+`.git/commit-review/state.json`, saved on Deny and cleared on Accept. A
+file whose diff did not change keeps its Viewed mark. A comment comes
+back pending, and goes to the agent again, as long as the lines it quotes
+are still in the diff; once they changed, the agent acted on it, and the
+comment shows as outdated, not sent unless reopened. Closing the window
+without a decision saves nothing.
+
 ## Claude Code hook
 
 Register the binary as a PreToolUse hook on the Bash tool, in
