@@ -17,8 +17,9 @@ li.tree-file button:hover { background: rgba(127,127,127,.12); }
 li.tree-file.viewed button { opacity: .5; }
 li.tree-file.viewed button::after { content: " \2713"; }
 
-#diff-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.review-head { display: flex; gap: 14px; align-items: baseline; font-size: 12px; opacity: .8; }
+#diff-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.review-head { display: flex; gap: 14px; align-items: baseline; font-size: 12px; opacity: .8; white-space: nowrap; }
+.review-head[hidden] { display: none; }
 #files { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
 #files.empty { opacity: .6; font-style: italic; }
 

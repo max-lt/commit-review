@@ -18,8 +18,6 @@ const SCOPE_LABEL = {
   tracked: "Tracked files as they are: git commit -a",
   worktree: "Working tree, untracked files included: git add runs first",
 };
-const SUMMARY_SIZE = { width: 620, height: 680 };
-const REVIEW_SIZE = { width: 1280, height: 860 };
 const SVG = "http://www.w3.org/2000/svg";
 const CHEVRON = "M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.939l3.72-3.719a.749.749 0 0 1 1.06 0Z";
 const BUBBLE = "M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z";
@@ -52,9 +50,9 @@ async function toggleReview() {
   reviewOpen = !reviewOpen;
   $("summary").hidden = reviewOpen;
   $("review").hidden = !reviewOpen;
+  $("review-head").hidden = !reviewOpen;
   $("toggle-review").textContent = reviewOpen ? "Summary" : "Review changes";
   if (reviewOpen && !files.length) await loadReview();
-  await invoke("resize", reviewOpen ? REVIEW_SIZE : SUMMARY_SIZE);
 }
 
 async function loadReview() {

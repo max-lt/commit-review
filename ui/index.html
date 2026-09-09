@@ -8,7 +8,8 @@
   :root { color-scheme: light dark; font: 14px/1.45 -apple-system, system-ui, sans-serif; }
   body { margin: 0; padding: 18px 24px; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
   h1 { font-size: 16px; margin: 0; }
-  .repo { opacity: .7; font-size: 12px; word-break: break-all; margin-top: -8px; }
+  .repo-line { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-top: -8px; }
+  .repo { opacity: .7; font-size: 12px; word-break: break-all; }
   .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; opacity: .6; margin-bottom: 4px; }
   .label .opt { text-transform: none; letter-spacing: 0; }
   .subject { font-weight: 600; font-size: 15px; padding: 8px 12px; border-radius: 8px; background: rgba(127,127,127,.12); white-space: pre-wrap; word-break: break-word; }
@@ -35,7 +36,10 @@
 </head>
 <body>
   <h1 id="title">The agent wants to commit</h1>
-  <div class="repo" id="repo">...</div>
+  <div class="repo-line">
+    <div class="repo" id="repo">...</div>
+    <div class="review-head" id="review-head" hidden><span id="review-scope"></span><span id="review-count"></span></div>
+  </div>
 
   <div id="summary">
     <section id="message">
@@ -66,7 +70,6 @@
       <div id="tree"></div>
     </aside>
     <div id="diff-main">
-      <div class="review-head"><span id="review-scope"></span><span id="review-count"></span></div>
       <div id="files"></div>
     </div>
   </div>

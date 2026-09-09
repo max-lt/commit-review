@@ -190,34 +190,6 @@ fn changes(review: tauri::State<Review>) -> Result<Vec<diff::FileDiff>, String> 
     diff::changes(scope_of(command), command.is_some_and(message::amends))
 }
 
-/// Resizes the window for the review or the summary view.
-#[tauri::command]
-fn resize(window: tauri::WebviewWindow, width: f64, height: f64) -> Result<(), String> {
-    fit(&window, width, height).map_err(|e| e.to_string())
-}
-
-/// Applies the size and keeps the window inside the screen's work area,
-/// moving it no more than needed. The size is applied asynchronously, so
-/// the position is computed here rather than left to `center()`.
-fn fit(window: &tauri::WebviewWindow, width: f64, height: f64) -> tauri::Result<()> {
-    let Some(monitor) = window.current_monitor()? else {
-        return window.set_size(tauri::LogicalSize::new(width, height));
-    };
-    let scale = monitor.scale_factor();
-    let area = monitor.work_area();
-    let area_pos: tauri::LogicalPosition<f64> = area.position.to_logical(scale);
-    let area_size: tauri::LogicalSize<f64> = area.size.to_logical(scale);
-    // Title bar: the difference between the outer and the inner size.
-    let chrome = f64::from(window.outer_size()?.height - window.inner_size()?.height) / scale;
-    let width = width.min(area_size.width);
-    let height = height.min(area_size.height - chrome);
-    let pos: tauri::LogicalPosition<f64> = window.outer_position()?.to_logical(scale);
-    let x = pos.x.min(area_pos.x + area_size.width - width).max(area_pos.x);
-    let y = pos.y.min(area_pos.y + area_size.height - height - chrome).max(area_pos.y);
-    window.set_size(tauri::LogicalSize::new(width, height))?;
-    window.set_position(tauri::LogicalPosition::new(x, y))
-}
-
 /// The reviewer's decision, with the notes and comments left in the window.
 #[tauri::command]
 fn decide(review: tauri::State<Review>, accept: bool, notes: String) {
@@ -227,7 +199,7 @@ fn decide(review: tauri::State<Review>, accept: bool, notes: String) {
 fn review(command: Option<String>, output: Output) -> ! {
     let app = tauri::Builder::default()
         .manage(Review { command, output })
-        .invoke_handler(tauri::generate_handler![context, changes, resize, decide])
+        .invoke_handler(tauri::generate_handler![context, changes, decide])
         .setup(|app| {
             // Started by a hook, with no terminal: the window has to take
             // focus itself, or it opens behind the terminal.
