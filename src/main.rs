@@ -41,17 +41,17 @@ struct Context {
     /// The command the agent is about to run, when known.
     command: Option<String>,
     message: Option<message::CommitMessage>,
-    /// Characters outside printable ASCII in the message, per field.
-    ascii_issues: Option<AsciiIssues>,
+    /// What the message contains that deserves a look, per field.
+    findings: Option<Findings>,
     /// The commit being rewritten by `--amend`, if any.
     amend: Option<Amend>,
     scope: message::Scope,
 }
 
 #[derive(serde::Serialize)]
-struct AsciiIssues {
-    subject: Vec<message::NonAscii>,
-    body: Vec<message::NonAscii>,
+struct Findings {
+    subject: Vec<message::Finding>,
+    body: Vec<message::Finding>,
 }
 
 #[derive(serde::Serialize)]
@@ -167,9 +167,9 @@ fn context(review: tauri::State<Review>) -> Result<Context, String> {
             message_kept,
         });
     }
-    let ascii_issues = message.as_ref().map(|m| AsciiIssues {
-        subject: message::non_printable_ascii(&m.subject),
-        body: message::non_printable_ascii(&m.body),
+    let findings = message.as_ref().map(|m| Findings {
+        subject: message::findings(&m.subject),
+        body: message::findings(&m.body),
     });
     Ok(Context {
         repo: git::run(&["rev-parse", "--show-toplevel"])?,
@@ -178,7 +178,7 @@ fn context(review: tauri::State<Review>) -> Result<Context, String> {
         scope: scope_of(command.as_deref()),
         command,
         message,
-        ascii_issues,
+        findings,
         amend,
     })
 }

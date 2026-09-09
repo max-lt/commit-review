@@ -22,25 +22,47 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.metaKey) decide(true);
 });
 
-// Renders text with each reported character wrapped in a <mark>; characters
-// that would be invisible (controls, exotic spaces) show their code point.
-const render = (el, text, issues) => {
+// Finding kinds as the binary names them, with singular and plural labels.
+const KIND_LABEL = {
+  "non-ascii": ["non-ASCII", "non-ASCII"],
+  email: ["email", "emails"],
+  link: ["link", "links"],
+  "co-authored-by": ["Co-authored-by", "Co-authored-by"],
+};
+
+// A character that would be invisible (controls, exotic spaces) shows its
+// code point instead.
+const visible = (ch) => {
+  const code = ch.codePointAt(0);
+  if (code < 33 || code === 127 || /\s/.test(ch)) return "<U+" + code.toString(16).toUpperCase().padStart(4, "0") + ">";
+  return ch;
+};
+
+// Renders text with each finding wrapped in a <mark>. Spans go first, then
+// single characters, which are the more precise mark.
+const render = (el, text, findings) => {
   el.textContent = "";
-  const bad = new Map(issues.map((i) => [i.index, i.code]));
-  let run = "";
-  const flush = () => { if (run) { el.appendChild(document.createTextNode(run)); run = ""; } };
-  [...text].forEach((ch, i) => {
-    if (!bad.has(i)) { run += ch; return; }
-    flush();
-    const code = bad.get(i);
-    const hex = "U+" + code.toString(16).toUpperCase().padStart(4, "0");
-    const m = document.createElement("mark");
-    m.className = "bad";
-    m.title = hex;
-    m.textContent = (code < 33 || code === 127 || /\s/.test(ch)) ? "<" + hex + ">" : ch;
-    el.appendChild(m);
-  });
-  flush();
+  const chars = [...text];
+  const kinds = new Array(chars.length).fill(null);
+  findings.filter((f) => f.kind !== "non-ascii").forEach((f) => { for (let i = f.start; i < f.end; i++) kinds[i] = f.kind; });
+  findings.filter((f) => f.kind === "non-ascii").forEach((f) => { kinds[f.start] = f.kind; });
+  let i = 0;
+  while (i < chars.length) {
+    const kind = kinds[i];
+    let j = i;
+    while (j < chars.length && kinds[j] === kind) j++;
+    const run = chars.slice(i, j);
+    if (!kind) {
+      el.append(run.join(""));
+    } else {
+      const m = document.createElement("mark");
+      m.className = "bad " + kind;
+      m.title = KIND_LABEL[kind][0];
+      m.textContent = kind === "non-ascii" ? run.map(visible).join("") : run.join("");
+      el.append(m);
+    }
+    i = j;
+  }
 };
 
 // Appends a line to the notes, on its own line.
@@ -50,20 +72,26 @@ const appendReason = (line) => {
   r.value += line + "\n";
   r.focus();
 };
-const badge = (name, count) => {
-  if (!count) return;
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = "badge";
-  b.textContent = name + ": " + count + " non-ASCII";
-  b.title = "Add to the notes";
-  b.onclick = () => appendReason(b.textContent);
-  $("message-label").appendChild(b);
+
+// One badge per kind of finding in a field, e.g. "body: 2 links".
+const badges = (name, findings) => {
+  const counts = {};
+  findings.forEach((f) => { counts[f.kind] = (counts[f.kind] || 0) + 1; });
+  Object.keys(KIND_LABEL).filter((kind) => counts[kind]).forEach((kind) => {
+    const n = counts[kind];
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "badge " + kind;
+    b.textContent = name + ": " + n + " " + KIND_LABEL[kind][n === 1 ? 0 : 1];
+    b.title = "Add to the notes";
+    b.onclick = () => appendReason(b.textContent);
+    $("message-label").appendChild(b);
+  });
 };
 
 $("reason").focus();
 invoke("context").then((ctx) => {
-  const { repo, status, command, message, ascii_issues, amend } = ctx;
+  const { repo, status, command, message, findings, amend } = ctx;
   scope = ctx.scope;
   user = ctx.user;
   $("repo").textContent = repo;
@@ -83,11 +111,11 @@ invoke("context").then((ctx) => {
     $("raw").hidden = false;
   }
   if (message) {
-    render($("subject"), message.subject, ascii_issues.subject);
-    badge("subject", ascii_issues.subject.length);
+    render($("subject"), message.subject, findings.subject);
+    badges("subject", findings.subject);
     if (message.body) {
-      render($("body"), message.body, ascii_issues.body);
-      badge("body", ascii_issues.body.length);
+      render($("body"), message.body, findings.body);
+      badges("body", findings.body);
       $("body").hidden = false;
     }
   } else {

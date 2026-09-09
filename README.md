@@ -1,8 +1,10 @@
 # commit-review
 
-Human review window before a commit started by Claude Code.
-Spike: the commit message (subject and body), the list of changed files,
-the exact command, an optional deny reason, two buttons: Accept or Deny.
+Human review window before a commit started by Claude Code: the commit
+message with its subject and body, what deserves a look in it (characters
+outside printable ASCII, emails, links, Co-authored-by trailers), the
+changed files, the exact command, a review view of the diff with line
+comments, notes for the agent, and two buttons: Accept or Deny.
 
 ## Build
 

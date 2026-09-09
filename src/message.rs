@@ -7,7 +7,11 @@
 //! When no message is recognized, the UI shows the raw command instead.
 
 use std::iter::Peekable;
+use std::ops::Range;
 use std::str::Chars;
+use std::sync::LazyLock;
+
+use regex::Regex;
 
 /// Message split the way git does: subject = first paragraph,
 /// body = everything after the first blank line.
@@ -17,21 +21,70 @@ pub struct CommitMessage {
     pub body: String,
 }
 
-/// A character outside printable ASCII (32-126), with its char index.
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
-pub struct NonAscii {
-    pub index: usize,
-    pub code: u32,
+/// Something in a message worth a second look.
+#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+pub enum Kind {
+    NonAscii,
+    Email,
+    Link,
+    CoAuthoredBy,
 }
 
-/// Characters outside printable ASCII (32-126). Newlines separate lines,
-/// they are not content, so they are not reported.
-pub fn non_printable_ascii(text: &str) -> Vec<NonAscii> {
-    text.chars()
+/// A span of the text, in char indices, `end` excluded.
+#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+pub struct Finding {
+    pub kind: Kind,
+    pub start: usize,
+    pub end: usize,
+}
+
+static EMAIL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}").unwrap());
+static LINK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?:https?://|www\.)[^\s<>"')\]]+"#).unwrap());
+static CO_AUTHORED_BY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?mi)^co-authored-by:.*$").unwrap());
+
+/// Characters outside printable ASCII (32-126), emails, links and
+/// Co-authored-by trailers, in text order. Newlines separate lines, they
+/// are not content, so they are not reported.
+pub fn findings(text: &str) -> Vec<Finding> {
+    let trailers: Vec<Finding> = CO_AUTHORED_BY
+        .find_iter(text)
+        .map(|m| span(text, Kind::CoAuthoredBy, m.range()))
+        .collect();
+    // The email of a Co-authored-by line is the trailer, not a second finding.
+    let emails: Vec<Finding> = EMAIL
+        .find_iter(text)
+        .map(|m| span(text, Kind::Email, m.range()))
+        .filter(|e| !trailers.iter().any(|t| t.start <= e.start && e.end <= t.end))
+        .collect();
+    let links = LINK.find_iter(text).map(|m| {
+        // Sentence punctuation after a link is not part of it.
+        let kept = m.as_str().trim_end_matches(['.', ',', ';', ':', '!', '?']).len();
+        span(text, Kind::Link, m.start()..m.start() + kept)
+    });
+    let non_ascii = text
+        .chars()
         .enumerate()
         .filter(|(_, c)| *c != '\n' && !(' '..='~').contains(c))
-        .map(|(index, c)| NonAscii { index, code: c as u32 })
-        .collect()
+        .map(|(i, _)| Finding { kind: Kind::NonAscii, start: i, end: i + 1 });
+    let mut out: Vec<Finding> = trailers
+        .into_iter()
+        .chain(emails)
+        .chain(links)
+        .chain(non_ascii)
+        .collect();
+    out.sort_by_key(|f| (f.start, f.end));
+    out
+}
+
+/// A finding from byte offsets, converted to char indices.
+fn span(text: &str, kind: Kind, bytes: Range<usize>) -> Finding {
+    let start = text[..bytes.start].chars().count();
+    let end = start + text[bytes].chars().count();
+    Finding { kind, start, end }
 }
 
 /// True when the command runs `git commit` itself, as opposed to merely
@@ -420,21 +473,36 @@ mod tests {
         assert_eq!(extract("git commit -F - <<EOF\nsubject only\nEOF"), msg("subject only", ""));
     }
 
+    fn finding(kind: Kind, start: usize, end: usize) -> Finding {
+        Finding { kind, start, end }
+    }
+
     #[test]
-    fn printable_ascii_passes() {
-        assert!(non_printable_ascii("Add thing (v2): ok!\n\nbody ~ 100%").is_empty());
+    fn plain_message_has_no_findings() {
+        assert!(findings("Add thing (v2): ok!\n\nbody ~ 100%, see src/main.rs").is_empty());
     }
 
     #[test]
     fn non_ascii_and_control_chars_are_reported() {
+        assert_eq!(findings("c\u{2019}est"), vec![finding(Kind::NonAscii, 1, 2)]);
         assert_eq!(
-            non_printable_ascii("c\u{2019}est"),
-            vec![NonAscii { index: 1, code: 0x2019 }]
+            findings("a\tb\u{e9}"),
+            vec![finding(Kind::NonAscii, 1, 2), finding(Kind::NonAscii, 3, 4)]
         );
+    }
+
+    #[test]
+    fn emails_links_and_trailers_are_reported() {
+        let text = "See https://x.y/z, mail me@x.org.\nCo-authored-by: Bot <bot@x.org>";
         assert_eq!(
-            non_printable_ascii("a\tb\u{e9}"),
-            vec![NonAscii { index: 1, code: 9 }, NonAscii { index: 3, code: 0xe9 }]
+            findings(text),
+            vec![
+                finding(Kind::Link, 4, 17),
+                finding(Kind::Email, 24, 32),
+                finding(Kind::CoAuthoredBy, 34, 65),
+            ]
         );
+        assert_eq!(findings("go to www.example.com!"), vec![finding(Kind::Link, 6, 21)]);
     }
 
     #[test]
