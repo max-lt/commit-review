@@ -1,92 +1,110 @@
 # commit-review
 
-Human review window before a commit started by Claude Code: the commit
-message with its subject and body, what deserves a look in it (characters
-outside printable ASCII, emails, links, Co-authored-by trailers), the
-changed files, the exact command, a review view of the diff with line
-comments, notes for the agent, and two buttons: Accept or Deny.
+A native window that opens when a coding agent is about to run
+`git commit`. It shows what the commit will be; the reviewer accepts it,
+denies it, or sends notes and line comments back to the agent. One Rust
+binary with a Tauri window, nothing to install.
 
-## Build
+## How it plugs in
 
-    cargo build --release
-    cargo test
-
-The binary is `target/release/commit-review`. That directory is on the PATH
-through `~/.zshrc`, so there is nothing to install.
-
-## Binary contract
+The binary is a PreToolUse hook on the agent's shell tool. Claude Code
+and Codex CLI speak the same hook protocol, so one command serves both:
 
     commit-review hook
-    commit-review [--command "<shell command>"]
 
-`hook` is the Claude Code PreToolUse entry point. It reads the event JSON
-on stdin and exits 0 at once unless the command runs `git commit` itself;
-a mention inside a quoted string or a heredoc body does not count. Then it
-opens the window in the event's cwd. Deny prints the hook's JSON answer
-with the notes as the reason; Accept with notes prints an allow with the
-notes as `additionalContext`, so the agent reads them either way. A crash
-denies as well.
+It reads the event JSON on stdin and exits at once, silently, unless the
+command runs `git commit` itself; a mention inside a quoted string or a
+heredoc body does not count. Otherwise it opens the window in the event's
+cwd and answers on stdout:
 
-The second form is a manual launch inside a git repository. With
-`--command`, it extracts the commit message (`-m`, `--message`, `-am`,
-`$(cat <<'EOF' ... EOF)` heredoc) and shows it; without, only the file
-list is shown. Parser: `src/message.rs`.
+- Deny: `permissionDecision: deny`, with the notes and comments as the
+  reason the agent reads.
+- Accept: nothing, or `permissionDecision: allow` with the notes as
+  `additionalContext`, so the agent reads them either way.
+- A crash, or the window closed without a decision, denies. A gate that
+  lets commits through when it is broken is worthless.
 
-| Decision              | stdout            | exit  |
-| --------------------- | ----------------- | ----- |
-| Accept                | the notes, if any | 0     |
-| Deny                  | the notes         | 10    |
-| Window closed, Cmd+Q  | the reason        | 10    |
-| Failure               | stderr            | other |
+Claude Code, in `~/.claude/settings.json` for every session or in a
+project's `.claude/settings.json`:
 
-The exit code is the binary's own. In a shell wrapper such as
-`commit-review; echo $?`, the echo returns 0, not the binary.
+    "hooks": { "PreToolUse": [{ "matcher": "Bash", "hooks": [{
+      "type": "command",
+      "command": "/path/to/commit-review/target/release/commit-review hook",
+      "timeout": 3600 }] }] }
 
-## Review view
+Codex CLI, in `~/.codex/hooks.json` or in a project's `.codex/hooks.json`:
 
-"Review changes" swaps the summary for the diff of what the commit will
-contain: the index for a plain `git commit`, tracked files for `-a`, the
-whole working tree when a `git add` runs first; against HEAD~1 for an
-amend. A file tree with a filter sits on the left; each file collapses,
-takes a file-level comment, and can be marked Viewed, which collapses it
-and counts it. Lines are numbered on both sides. The "+" on a line opens
-a comment; dragging it selects a range. Comments stay pending and
-editable until the decision, which sends them to the agent after the notes,
-each as:
+    { "hooks": { "PreToolUse": [{ "matcher": "^Bash$", "hooks": [{
+      "type": "command",
+      "command": "/path/to/commit-review/target/release/commit-review hook",
+      "timeout": 3600 }] }] } }
+
+Settings changes reach running sessions. If the binary is missing, which
+only `cargo clean` does, the agent reports a hook error and lets the
+commit through: rebuild.
+
+## The window
+
+Summary: the commit message as git will record it, subject and body,
+read from `-m`, `--message`, `-am` or the `$(cat <<'EOF' ... EOF)`
+heredoc; the changed files; the exact command. What deserves a look is
+highlighted, with one badge per kind and field that a click adds to the
+notes: characters outside printable ASCII (32-126), emails, links,
+Co-authored-by trailers. An amend names the commit it rewrites, shows the
+message git will keep when none is given, and what HEAD already contains.
+
+Review changes: the diff of what the commit will contain, in the style
+of GitHub's "Files changed" tab. The scope follows the command: the index
+for a plain `git commit`, tracked files for `-a`, the working tree with
+untracked files when a `git add` runs first; against HEAD~1 for an amend.
+A file tree with a filter on the left; per file, a chevron to collapse,
+a Viewed checkbox that collapses and counts, a file-level comment. Lines
+are numbered on both sides; the "+" on a line opens a comment, dragging
+it selects a range. Comments stay pending and editable until the
+decision, then reach the agent after the notes, each as:
 
     src/main.rs:L42-L45
     > -old line
     > +new line
     the comment
 
-The review carries over between attempts, through
-`.git/commit-review/state.json`: Viewed holds while a file's diff is
-unchanged, and a comment comes back as long as its lines are still in
-the diff, as outdated once they changed.
+Notes for the agent: free text, sent with either decision.
 
-## Claude Code hook
+Between attempts the review carries over, through
+`.git/commit-review/state.json`, saved on Deny and cleared on Accept.
+Viewed holds while a file's diff is unchanged. A comment comes back
+pending, and is sent again, while the lines it quotes are still in the
+diff; once they changed, the agent acted on it, and the comment shows as
+outdated, not sent unless reopened.
 
-Register the binary as a PreToolUse hook on the Bash tool, in
-`~/.claude/settings.json` for every session or in a project's
-`.claude/settings.json` for that project only:
+## Manual launch
 
-    "hooks": {
-      "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command",
-        "command": "/Users/max/Documents/projects/commit-review/target/release/commit-review hook",
-        "timeout": 3600 }] }]
-    }
+    commit-review [--command "<shell command>"]
 
-Settings changes reach running sessions. If the binary is missing, which
-only `cargo clean` does, Claude Code reports a hook error and lets commits
-through: rebuild.
+Run inside a repository, for a look without any agent. With `--command`
+the window shows that command's message and scope; without, the working
+tree. Nothing is committed either way.
 
-## Codex CLI hook
+| Decision               | stdout            | exit  |
+| ---------------------- | ----------------- | ----- |
+| Accept                 | the notes, if any | 0     |
+| Deny, or window closed | the notes         | 10    |
+| Failure                | stderr            | other |
 
-Codex speaks the same hook protocol: the same event on stdin, the same
-answer on stdout. Register the same command in `~/.codex/hooks.json`, or
-in a project's `.codex/hooks.json`:
+## Build and test
 
-    { "hooks": { "PreToolUse": [{ "matcher": "^Bash$", "hooks": [{
-        "type": "command",
-        "command": "/Users/max/Documents/projects/commit-review/target/release/commit-review hook",
-        "timeout": 3600 }] }] } }
+    cargo build --release
+    cargo test
+
+The binary is `target/release/commit-review`; the hook registrations
+point at it, so a rebuild is a deploy. Rust, Tauri 2 on the system
+webview, a static `ui/` folder, no npm.
+
+## Known limits
+
+- A `git add` with paths is read as the whole working tree: the review
+  may show more than the commit will contain, never less.
+- A `git commit` inside `$(...)` within double quotes is not detected.
+- `--fixup` and `--squash` messages are generated by git and show as not
+  recognized, with the exact command below.
+- No syntax highlighting, no side-by-side view.
