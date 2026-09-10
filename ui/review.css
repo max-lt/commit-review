@@ -34,7 +34,10 @@ li.tree-file.viewed button::after { content: " \2713"; }
 .file-head::before, .file-head::after { content: ""; position: absolute; inset: 0; }
 .file-head::before { background: Canvas; z-index: -2; }
 .file-head::after { background: rgba(127,127,127,.12); border: 1px solid rgba(127,127,127,.35); border-bottom: 0; border-radius: 8px 8px 0 0; z-index: -1; }
+/* Collapsed, the header is the whole box: it draws all four borders, and
+   no longer overlaps box borders that are not there. */
 .file.collapsed { border: 0; }
+.file.collapsed .file-head { margin: 0; }
 .file.collapsed .file-head::after { border-bottom: 1px solid rgba(127,127,127,.35); border-radius: 8px; }
 .diff-scroll { overflow-x: auto; }
 .file-head .chevron, .file-head .file-comment { display: inline-flex; padding: 3px; border: 0; background: none; opacity: .7; }
