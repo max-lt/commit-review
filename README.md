@@ -79,3 +79,14 @@ Register the binary as a PreToolUse hook on the Bash tool, in
 Settings changes reach running sessions. If the binary is missing, which
 only `cargo clean` does, Claude Code reports a hook error and lets commits
 through: rebuild.
+
+## Codex CLI hook
+
+Codex speaks the same hook protocol: the same event on stdin, the same
+answer on stdout. Register the same command in `~/.codex/hooks.json`, or
+in a project's `.codex/hooks.json`:
+
+    { "hooks": { "PreToolUse": [{ "matcher": "^Bash$", "hooks": [{
+        "type": "command",
+        "command": "/Users/max/Documents/projects/commit-review/target/release/commit-review hook",
+        "timeout": 3600 }] }] } }
