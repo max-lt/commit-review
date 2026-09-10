@@ -27,10 +27,10 @@ cwd and answers on stdout:
 Claude Code, in `~/.claude/settings.json` for every session or in a
 project's `.claude/settings.json`:
 
-    "hooks": { "PreToolUse": [{ "matcher": "Bash", "hooks": [{
+    { "hooks": { "PreToolUse": [{ "matcher": "Bash", "hooks": [{
       "type": "command",
       "command": "/path/to/commit-review/target/release/commit-review hook",
-      "timeout": 3600 }] }] }
+      "timeout": 3600 }] }] } }
 
 Codex CLI, in `~/.codex/hooks.json` or in a project's `.codex/hooks.json`:
 
