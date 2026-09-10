@@ -88,12 +88,10 @@ checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 [[package]]
 name = "blit"
 version = "0.1.0"
-source = "git+https://github.com/nicoburniske/blit#1235e1775bae56686f3d0170b1dfab3ffff7f0cc"
 
 [[package]]
 name = "blit-cpu"
 version = "0.1.0"
-source = "git+https://github.com/nicoburniske/blit#1235e1775bae56686f3d0170b1dfab3ffff7f0cc"
 dependencies = [
  "blit",
  "blit-text",
@@ -105,7 +103,6 @@ dependencies = [
 [[package]]
 name = "blit-desktop"
 version = "0.1.0"
-source = "git+https://github.com/nicoburniske/blit#1235e1775bae56686f3d0170b1dfab3ffff7f0cc"
 dependencies = [
  "blit",
  "blit-cpu",
@@ -119,12 +116,10 @@ dependencies = [
 [[package]]
 name = "blit-diff"
 version = "0.1.0"
-source = "git+https://github.com/nicoburniske/blit#1235e1775bae56686f3d0170b1dfab3ffff7f0cc"
 
 [[package]]
 name = "blit-executor"
 version = "0.1.0"
-source = "git+https://github.com/nicoburniske/blit#1235e1775bae56686f3d0170b1dfab3ffff7f0cc"
 dependencies = [
  "slotmap",
 ]
@@ -132,7 +127,6 @@ dependencies = [
 [[package]]
 name = "blit-std"
 version = "0.1.0"
-source = "git+https://github.com/nicoburniske/blit#1235e1775bae56686f3d0170b1dfab3ffff7f0cc"
 dependencies = [
  "blit",
  "unicode-segmentation",
@@ -141,7 +135,6 @@ dependencies = [
 [[package]]
 name = "blit-text"
 version = "0.1.0"
-source = "git+https://github.com/nicoburniske/blit#1235e1775bae56686f3d0170b1dfab3ffff7f0cc"
 dependencies = [
  "blit",
 ]
@@ -149,7 +142,6 @@ dependencies = [
 [[package]]
 name = "blit-text-cosmic"
 version = "0.1.0"
-source = "git+https://github.com/nicoburniske/blit#1235e1775bae56686f3d0170b1dfab3ffff7f0cc"
 dependencies = [
  "blit",
  "blit-text",
@@ -160,7 +152,6 @@ dependencies = [
 [[package]]
 name = "blit_cache"
 version = "0.1.0"
-source = "git+https://github.com/nicoburniske/blit#1235e1775bae56686f3d0170b1dfab3ffff7f0cc"
 dependencies = [
  "hashbrown 0.14.5",
 ]

@@ -5,11 +5,12 @@ edition = "2021"
 description = "Human review gate before a commit started by Claude Code"
 
 [dependencies]
-blit = { git = "https://github.com/nicoburniske/blit" }
-blit-cpu = { git = "https://github.com/nicoburniske/blit" }
-blit-desktop = { git = "https://github.com/nicoburniske/blit" }
-blit-text = { git = "https://github.com/nicoburniske/blit" }
-blit-text-cosmic = { git = "https://github.com/nicoburniske/blit" }
+# A local clone of https://github.com/nicoburniske/blit, at 1235e17.
+blit = { path = "../../forks/blit/kernel" }
+blit-cpu = { path = "../../forks/blit/render/cpu" }
+blit-desktop = { path = "../../forks/blit/platform/desktop" }
+blit-text = { path = "../../forks/blit/render/text" }
+blit-text-cosmic = { path = "../../forks/blit/render/text-cosmic" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 regex = "1"
