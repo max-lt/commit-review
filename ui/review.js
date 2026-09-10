@@ -180,7 +180,9 @@ function renderFile(file, fi) {
       idx += 1;
     });
   });
-  box.append(table);
+  const scroller = el("div", "diff-scroll");
+  scroller.append(table);
+  box.append(scroller);
   return box;
 }
 

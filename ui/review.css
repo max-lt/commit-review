@@ -23,13 +23,25 @@ li.tree-file.viewed button::after { content: " \2713"; }
 #files { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
 #files.empty { opacity: .6; font-style: italic; }
 
-.file { border: 1px solid rgba(127,127,127,.35); border-radius: 8px; overflow-x: auto; flex-shrink: 0; }
-.file-head { display: flex; gap: 10px; align-items: center; padding: 6px 12px; background: rgba(127,127,127,.12); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; position: sticky; left: 0; }
+/* The header stays at the top of the list while the file scrolls under it.
+   It draws its own rounded surface and its top, left and right borders,
+   over a square page-colored backing so nothing shows through the corners
+   while pinned; the box keeps the other borders. The diff table scrolls
+   sideways on its own, because a scroll container on .file would pin the
+   header to .file instead. */
+.file { border: 1px solid rgba(127,127,127,.35); border-top: 0; border-radius: 0 0 8px 8px; flex-shrink: 0; }
+.file-head { display: flex; gap: 10px; align-items: center; padding: 6px 12px; margin: 0 -1px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; position: sticky; top: 0; z-index: 1; }
+.file-head::before, .file-head::after { content: ""; position: absolute; inset: 0; }
+.file-head::before { background: Canvas; z-index: -2; }
+.file-head::after { background: rgba(127,127,127,.12); border: 1px solid rgba(127,127,127,.35); border-bottom: 0; border-radius: 8px 8px 0 0; z-index: -1; }
+.file.collapsed { border: 0; }
+.file.collapsed .file-head::after { border-bottom: 1px solid rgba(127,127,127,.35); border-radius: 8px; }
+.diff-scroll { overflow-x: auto; }
 .file-head .chevron, .file-head .file-comment { display: inline-flex; padding: 3px; border: 0; background: none; opacity: .7; }
 .file-head .chevron:hover, .file-head .file-comment:hover { opacity: 1; background: rgba(127,127,127,.15); }
 .file-head .chevron svg { transition: transform .15s; }
 .file.collapsed .chevron svg { transform: rotate(-90deg); }
-.file.collapsed > table, .file.collapsed > .file-note, .file.collapsed > .file-comments { display: none; }
+.file.collapsed > .diff-scroll, .file.collapsed > .file-note, .file.collapsed > .file-comments { display: none; }
 .viewed-label { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid rgba(127,127,127,.4); border-radius: 6px; font: 12px -apple-system, system-ui, sans-serif; cursor: pointer; }
 .viewed-label input { margin: 0; }
 .file-comments { padding: 8px 12px 0; background: rgba(127,127,127,.06); }
