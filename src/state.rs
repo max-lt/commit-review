@@ -31,8 +31,7 @@ pub struct SavedComment {
 }
 
 /// A saved comment brought back into the current diff.
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
-#[serde(tag = "anchor", rename_all = "lowercase")]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Restored {
     /// The quoted lines are still there, at these flat indices.
     Lines { start: usize, end: usize, text: String },
@@ -42,8 +41,7 @@ pub enum Restored {
     Outdated { quote: Vec<String>, text: String },
 }
 
-/// One file's review as the window sends it back.
-#[derive(serde::Deserialize)]
+/// One file's review as the window leaves it.
 pub struct FileReview {
     pub path: String,
     pub viewed: bool,
@@ -51,7 +49,6 @@ pub struct FileReview {
 }
 
 /// A comment at flat line indices, or on the whole file when absent.
-#[derive(serde::Deserialize)]
 pub struct CommentAt {
     pub start: Option<usize>,
     pub end: Option<usize>,

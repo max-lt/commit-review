@@ -10,11 +10,10 @@ mod diff;
 mod git;
 mod message;
 mod state;
+mod text;
+mod ui;
 
 use std::io::{Read, Write};
-use std::sync::Mutex;
-
-use tauri::Manager;
 
 /// Exit code of a manual launch when the reviewer denies the commit.
 const EXIT_DENIED: i32 = 10;
@@ -28,25 +27,15 @@ enum Output {
     Plain,
 }
 
-/// What the window is reviewing, shared with the webview commands.
-struct Review {
-    command: Option<String>,
-    output: Output,
-    /// The diff as sent to the window, to quote commented lines on save.
-    files: Mutex<Vec<diff::FileDiff>>,
-}
-
 /// A file of the diff with what an earlier attempt left on it.
-#[derive(serde::Serialize)]
 struct Change {
-    #[serde(flatten)]
     diff: diff::FileDiff,
     /// Marked viewed earlier and unchanged since.
     viewed: bool,
     restored: Vec<state::Restored>,
 }
 
-#[derive(serde::Serialize)]
+/// What the summary shows.
 struct Context {
     repo: String,
     status: String,
@@ -62,13 +51,11 @@ struct Context {
     scope: message::Scope,
 }
 
-#[derive(serde::Serialize)]
 struct Findings {
     subject: Vec<message::Finding>,
     body: Vec<message::Finding>,
 }
 
-#[derive(serde::Serialize)]
 struct Amend {
     /// Short hash and subject of HEAD.
     head: String,
@@ -160,17 +147,14 @@ fn scope_of(command: Option<&str>) -> message::Scope {
 }
 
 /// What the window shows.
-#[tauri::command]
-fn context(review: tauri::State<Review>) -> Result<Context, String> {
-    let command = review.command.clone();
-    let mut message = command.as_deref().and_then(message::extract);
+fn context(command: Option<&str>) -> Result<Context, String> {
+    let mut message = command.and_then(message::extract);
     let mut amend = None;
-    if command.as_deref().is_some_and(message::amends) {
+    if command.is_some_and(message::amends) {
         let message_kept = message.is_none();
         if message_kept {
             // Without -m, git keeps the message of HEAD or of the -C revision.
             let rev = command
-                .as_deref()
                 .and_then(message::reused_message_rev)
                 .unwrap_or_else(|| "HEAD".to_string());
             message = message::from_raw(&git::run(&["log", "-1", "--format=%B", &rev])?);
@@ -189,8 +173,8 @@ fn context(review: tauri::State<Review>) -> Result<Context, String> {
         repo: git::run(&["rev-parse", "--show-toplevel"])?,
         status: git::run(&["status", "--short"])?,
         user: git::run(&["config", "user.name"]).unwrap_or_else(|_| "You".to_string()),
-        scope: scope_of(command.as_deref()),
-        command,
+        scope: scope_of(command),
+        command: command.map(str::to_string),
         message,
         findings,
         amend,
@@ -198,42 +182,37 @@ fn context(review: tauri::State<Review>) -> Result<Context, String> {
 }
 
 /// The changes the commit will contain, with the earlier review of each.
-#[tauri::command]
-fn changes(review: tauri::State<Review>) -> Result<Vec<Change>, String> {
-    let command = review.command.as_deref();
+fn changes(command: Option<&str>) -> Result<Vec<Change>, String> {
     let files = diff::changes(scope_of(command), command.is_some_and(message::amends))?;
     let saved = state::State::load()?;
-    let changes = files
-        .iter()
-        .map(|f| {
-            let (viewed, restored) = saved.restore(f);
-            Change { diff: f.clone(), viewed, restored }
+    Ok(files
+        .into_iter()
+        .map(|diff| {
+            let (viewed, restored) = saved.restore(&diff);
+            Change { diff, viewed, restored }
         })
-        .collect();
-    *review.files.lock().unwrap() = files;
-    Ok(changes)
+        .collect())
 }
 
-/// The reviewer's decision, with the notes and comments left in the window.
+/// Leaves with the reviewer's decision and the text for the agent.
 /// `reviews` is absent when the diff was never opened: the saved state
 /// then stands as it is.
-#[tauri::command]
 fn decide(
-    review: tauri::State<Review>,
+    output: Output,
     accept: bool,
-    notes: String,
-    reviews: Option<Vec<state::FileReview>>,
-) {
+    text: &str,
+    reviews: Option<(&[diff::FileDiff], Vec<state::FileReview>)>,
+) -> ! {
     let kept = match (accept, reviews) {
         (true, _) => state::State::clear(),
-        (false, Some(reviews)) => state::State::build(&review.files.lock().unwrap(), reviews).save(),
+        (false, Some((files, reviews))) => state::State::build(files, reviews).save(),
         (false, None) => Ok(()),
     };
     // Losing the review state is not worth losing the decision.
     if let Err(e) = kept {
         eprintln!("commit-review: {e}");
     }
-    finish(review.output, accept, notes.trim())
+    finish(output, accept, text.trim())
 }
 
 fn review(command: Option<String>, output: Output) -> ! {
@@ -241,28 +220,11 @@ fn review(command: Option<String>, output: Output) -> ! {
     if let Ok(root) = git::run(&["rev-parse", "--show-toplevel"]) {
         std::env::set_current_dir(root).expect("repository root exists");
     }
-    let app = tauri::Builder::default()
-        .manage(Review { command, output, files: Mutex::new(Vec::new()) })
-        .invoke_handler(tauri::generate_handler![context, changes, decide])
-        .setup(|app| {
-            // Started by a hook, with no terminal: the window has to take
-            // focus itself, or it opens behind the terminal.
-            if let Some(window) = app.get_webview_window("main") {
-                window.show()?;
-                window.set_focus()?;
-            }
-            Ok(())
-        })
-        .build(tauri::generate_context!())
-        .expect("commit-review: could not start the window");
-
-    app.run(move |_app, event| {
-        // Window closed or Cmd+Q without a click: no decision, so deny.
-        // A gate that accepts by accident is worthless.
-        if let tauri::RunEvent::ExitRequested { code: None, .. } = event {
-            deny(output, "Review window closed without a decision: commit denied.")
-        }
-    });
-    // `run` only returns on platforms where the event loop can end.
-    deny(output, "Review window ended without a decision: commit denied.")
+    // Every decision leaves the process from inside the window: `run`
+    // returning means the window closed without one. A gate that accepts by
+    // accident is worthless.
+    match ui::run(command, output) {
+        Ok(()) => deny(output, "Review window closed without a decision: commit denied."),
+        Err(e) => deny(output, &format!("Review window failed to open, commit denied: {e}")),
+    }
 }

@@ -15,15 +15,14 @@ use regex::Regex;
 
 /// Message split the way git does: subject = first paragraph,
 /// body = everything after the first blank line.
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CommitMessage {
     pub subject: String,
     pub body: String,
 }
 
 /// Something in a message worth a second look.
-#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Kind {
     NonAscii,
     Email,
@@ -32,7 +31,7 @@ pub enum Kind {
 }
 
 /// A span of the text, in char indices, `end` excluded.
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Finding {
     pub kind: Kind,
     pub start: usize,
@@ -94,8 +93,7 @@ pub fn is_git_commit(cmd: &str) -> bool {
 }
 
 /// What the commit will contain.
-#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Scope {
     /// The index only: a plain `git commit`.
     Staged,

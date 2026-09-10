@@ -6,7 +6,7 @@ use crate::message::Scope;
 /// Hash of git's empty tree: what a root commit is measured against.
 const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FileDiff {
     pub path: String,
     /// Previous path of a renamed file.
@@ -23,8 +23,7 @@ impl FileDiff {
     }
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy, Hash)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Status {
     Added,
     Deleted,
@@ -32,13 +31,13 @@ pub enum Status {
     Renamed,
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Hunk {
     pub header: String,
     pub lines: Vec<Line>,
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Line {
     pub kind: Kind,
     /// Line number in the old file, absent for an added line.
@@ -60,8 +59,7 @@ impl Line {
     }
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone, Copy, Hash)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Kind {
     Context,
     Add,
