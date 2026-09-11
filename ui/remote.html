@@ -6,7 +6,10 @@
 <title>Commit review</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/icon.png">
+<script src="/theme.js"></script>
 <style>
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
   :root { color-scheme: light dark; font: 15px/1.5 -apple-system, system-ui, sans-serif; }
   body { margin: 0; padding: 20px 18px; max-width: 720px; box-sizing: border-box; }
   h1 { font-size: 17px; margin: 0 0 14px; display: flex; justify-content: space-between; align-items: baseline; }
@@ -24,7 +27,7 @@
 </style>
 </head>
 <body>
-<h1>Commit review <small id="who"></small></h1>
+<h1>Commit review <span><small id="who"></small> <button type="button" class="quiet" data-theme-switch onclick="theme.toggle()">Dark</button></span></h1>
 <section id="login" hidden>
   <p>Reviews published by your machines show here. Sign in with the GitHub account you used for <code>commit-review auth login</code>.</p>
   <button class="primary" id="start">Sign in with GitHub</button>

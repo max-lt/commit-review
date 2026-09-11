@@ -5,8 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Commit review</title>
 <link rel="stylesheet" href="/review.css">
+<script src="/theme.js"></script>
 <style>
   :root { color-scheme: light dark; font: 14px/1.45 -apple-system, system-ui, sans-serif; }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
   body { margin: 0; padding: 18px 24px; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
   h1 { font-size: 16px; margin: 0; }
   .repo-line { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-top: -8px; }
@@ -33,6 +36,8 @@
   button.accept { background: #2f6feb; border-color: #2f6feb; color: #fff; }
   button.deny { color: #d1242f; border-color: #d1242f; }
   kbd { opacity: .6; font-size: 11px; margin-left: 6px; }
+  button.quiet { background: none; border: 0; opacity: .6; padding: 0 4px; font-size: 12px; }
+  button.quiet:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -41,6 +46,7 @@
     <div class="repo" id="repo">...</div>
     <div class="repo" id="remote" hidden></div>
     <div class="review-head" id="review-head" hidden><span id="review-scope"></span><span id="review-count"></span><button type="button" class="tree-toggle" onclick="toggleTree()">Files</button></div>
+    <button type="button" class="quiet" data-theme-switch onclick="theme.toggle()">Dark</button>
   </div>
 
   <div id="summary">

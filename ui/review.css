@@ -96,18 +96,17 @@ tr.comment-row td { padding: 8px 12px 4px 56px; background: rgba(127,127,127,.06
 button.primary { background: #2f6feb; border-color: #2f6feb; color: #fff; }
 #pending-count { margin-right: auto; align-self: center; font-size: 12px; opacity: .8; }
 
-@media (prefers-color-scheme: dark) {
-  tr.add { background: rgba(46,160,67,.15); }
-  tr.add td.no { background: rgba(46,160,67,.3); }
-  tr.del { background: rgba(248,81,73,.15); }
-  tr.del td.no { background: rgba(248,81,73,.3); }
-  tr.hunk { background: rgba(56,139,253,.15); color: #8b949e; }
-  tr.selected td { background: rgba(187,128,9,.3); }
-  .file-status.added, .file-counts .add { color: #3fb950; }
-  .file-status.deleted, .file-counts .del { color: #f85149; }
-  .file-status.renamed { color: #a371f7; }
-  .file-status.modified { color: #d29922; }
-}
+/* The dark palette of the diff, by the theme theme.js sets on <html>. */
+[data-theme="dark"] tr.add { background: rgba(46,160,67,.15); }
+[data-theme="dark"] tr.add td.no { background: rgba(46,160,67,.3); }
+[data-theme="dark"] tr.del { background: rgba(248,81,73,.15); }
+[data-theme="dark"] tr.del td.no { background: rgba(248,81,73,.3); }
+[data-theme="dark"] tr.hunk { background: rgba(56,139,253,.15); color: #8b949e; }
+[data-theme="dark"] tr.selected td { background: rgba(187,128,9,.3); }
+[data-theme="dark"] .file-status.added, [data-theme="dark"] .file-counts .add { color: #3fb950; }
+[data-theme="dark"] .file-status.deleted, [data-theme="dark"] .file-counts .del { color: #f85149; }
+[data-theme="dark"] .file-status.renamed { color: #a371f7; }
+[data-theme="dark"] .file-status.modified { color: #d29922; }
 
 /* Narrow screens, the phone: one column, the tree on demand, the comment
    button always visible since there is no hover. */
