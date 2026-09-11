@@ -14,10 +14,18 @@ mod state;
 use std::io::{Read, Write};
 use std::sync::Mutex;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Exit code of a manual launch when the reviewer denies the commit.
 const EXIT_DENIED: i32 = 10;
+
+/// How long the window waits for a decision under the hook. Claude Code
+/// kills a hook at its timeout (3600 s as registered) and lets the command
+/// through, so the gate has to give up first, by denying.
+const DEADLINE: std::time::Duration = std::time::Duration::from_secs(55 * 60);
+/// Time left to the window to deny with its notes and comments saved
+/// before the process denies on its own.
+const GRACE: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// How a decision leaves the process.
 #[derive(Clone, Copy)]
@@ -244,12 +252,22 @@ fn review(command: Option<String>, output: Output) -> ! {
     let app = tauri::Builder::default()
         .manage(Review { command, output, files: Mutex::new(Vec::new()) })
         .invoke_handler(tauri::generate_handler![context, changes, decide])
-        .setup(|app| {
+        .setup(move |app| {
             // Started by a hook, with no terminal: the window has to take
             // focus itself, or it opens behind the terminal.
             if let Some(window) = app.get_webview_window("main") {
                 window.show()?;
                 window.set_focus()?;
+            }
+            if matches!(output, Output::Hook) {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(DEADLINE);
+                    // The window denies through the usual path, saving the review.
+                    let _ = handle.emit("deadline", ());
+                    std::thread::sleep(GRACE);
+                    deny(output, "No reviewer answered within an hour: commit denied. Do not retry until the reviewer is back.")
+                });
             }
             Ok(())
         })

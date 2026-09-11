@@ -23,6 +23,9 @@ cwd and answers on stdout:
   `additionalContext`, so the agent reads them either way.
 - A crash, or the window closed without a decision, denies. A gate that
   lets commits through when it is broken is worthless.
+- Claude Code kills a hook at its timeout and runs the command anyway, so
+  the window gives up after 55 minutes without a decision: it denies, the
+  notes and comments typed so far saved for the next attempt.
 
 Claude Code, in `~/.claude/settings.json` for every session or in a
 project's `.claude/settings.json`:

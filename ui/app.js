@@ -126,3 +126,11 @@ invoke("context").then((ctx) => {
   $("status").textContent = "git error: " + e;
   $("status").classList.add("err");
 });
+
+// The hook is killed at its timeout and the commit goes through: the
+// binary asks the window to give up first, denying with what was typed.
+window.__TAURI__.event.listen("deadline", () => {
+  const note = "No reviewer answered within an hour: commit denied. Do not retry until the reviewer is back.";
+  $("reason").value = [note, $("reason").value.trim()].filter(Boolean).join("\n\n");
+  decide(false);
+});
