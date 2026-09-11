@@ -127,10 +127,12 @@ checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 [[package]]
 name = "blit"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 
 [[package]]
 name = "blit-cpu"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 dependencies = [
  "blit",
  "blit-text",
@@ -142,6 +144,7 @@ dependencies = [
 [[package]]
 name = "blit-desktop"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 dependencies = [
  "blit",
  "blit-cpu",
@@ -156,10 +159,12 @@ dependencies = [
 [[package]]
 name = "blit-diff"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 
 [[package]]
 name = "blit-executor"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 dependencies = [
  "slotmap",
 ]
@@ -167,6 +172,7 @@ dependencies = [
 [[package]]
 name = "blit-gpu"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 dependencies = [
  "blit",
  "blit-cpu",
@@ -178,6 +184,7 @@ dependencies = [
 [[package]]
 name = "blit-std"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 dependencies = [
  "blit",
  "unicode-segmentation",
@@ -186,6 +193,7 @@ dependencies = [
 [[package]]
 name = "blit-text"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 dependencies = [
  "blit",
 ]
@@ -193,6 +201,7 @@ dependencies = [
 [[package]]
 name = "blit-text-cosmic"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 dependencies = [
  "blit",
  "blit-text",
@@ -203,6 +212,7 @@ dependencies = [
 [[package]]
 name = "blit_cache"
 version = "0.1.0"
+source = "git+https://github.com/max-lt/blit?rev=abc91fad00beebeec18c42b4e047047b30e4bcbe#abc91fad00beebeec18c42b4e047047b30e4bcbe"
 dependencies = [
  "hashbrown 0.14.5",
 ]

@@ -97,7 +97,8 @@ tree. Nothing is committed either way.
     cargo test
 
 The window is drawn with [blit](https://github.com/nicoburniske/blit),
-built from the clone in `../../forks/blit` through its `gpu` feature:
+built from [our fork](https://github.com/max-lt/blit), branch `gpu`,
+pinned by commit in `Cargo.toml`, through its `gpu` feature:
 frames are composed on the GPU, Metal on macOS and Vulkan on Linux, while
 text layout and glyph rasterization stay on the CPU. blit needs a nightly
 toolchain, pinned in `rust-toolchain.toml`. `BLIT_FRAME_TIMES=1` prints
