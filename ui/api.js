@@ -49,7 +49,7 @@ const api = (() => {
       body: JSON.stringify(decision),
     }).then(async (r) => {
       if (!r.ok) throw new Error(await r.text() || r.statusText);
-      document.body.innerHTML = '<p class="decided">' + (decision.accept ? "Accepted" : "Denied") + ". You can close this page.</p>";
+      document.body.innerHTML = '<p class="decided">' + (decision.accept ? "Accepted" : "Denied") + '. <a href="/">Back to the list</a></p>';
     }),
     onDeadline: () => {},
     onRemote: () => {},

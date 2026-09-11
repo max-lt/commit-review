@@ -87,7 +87,7 @@ session. With a login, every review is also published to a small
 Cloudflare worker, and the same UI opens on a phone; the first decision,
 window or phone, wins and the other side is told.
 
-    commit-review auth login --url https://<worker>.workers.dev
+    commit-review auth login --url https://commit-review.lechat.dev
     commit-review auth status
     commit-review auth logout
 

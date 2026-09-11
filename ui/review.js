@@ -274,7 +274,13 @@ function renderTreeNode(node) {
   return ul;
 }
 
+/// Narrow screens show the file tree over the diff, on demand.
+function toggleTree() {
+  $("review").classList.toggle("show-tree");
+}
+
 function reveal(fi) {
+  $("review").classList.remove("show-tree");
   expand(fi);
   boxes[fi].scrollIntoView({ block: "start", behavior: "smooth" });
 }

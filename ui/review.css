@@ -17,7 +17,7 @@ li.tree-file button:hover { background: rgba(127,127,127,.12); }
 li.tree-file.viewed button { opacity: .5; }
 li.tree-file.viewed button::after { content: " \2713"; }
 
-#diff-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#diff-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .review-head { display: flex; gap: 14px; align-items: baseline; font-size: 12px; opacity: .8; white-space: nowrap; }
 .review-head[hidden] { display: none; }
 #files { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
@@ -107,4 +107,37 @@ button.primary { background: #2f6feb; border-color: #2f6feb; color: #fff; }
   .file-status.deleted, .file-counts .del { color: #f85149; }
   .file-status.renamed { color: #a371f7; }
   .file-status.modified { color: #d29922; }
+}
+
+/* Narrow screens, the phone: one column, the tree on demand, the comment
+   button always visible since there is no hover. */
+.tree-toggle { display: none; }
+@media (max-width: 720px) {
+  body { padding: 12px 12px; height: 100dvh; gap: 10px; }
+  h1 { font-size: 15px; }
+  .repo-line { flex-wrap: wrap; margin-top: -4px; }
+  .review-head { white-space: normal; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .tree-toggle { display: inline-block; padding: 3px 10px; font-size: 12px; }
+  #review { flex-direction: column; gap: 8px; }
+  #tree-pane { display: none; width: auto; max-height: 45%; }
+  #review.show-tree #tree-pane { display: flex; }
+  #review.show-tree #diff-main { display: none; }
+  .file-head { flex-wrap: wrap; gap: 6px 8px; padding: 6px 8px; }
+  .file-path { word-break: break-all; }
+  .file-counts { margin-left: 0; }
+  table.diff { font-size: 11px; }
+  td.no { min-width: 28px; padding: 0 6px 0 4px; }
+  td.code { padding: 0 8px 0 24px; }
+  tr.comment-row td { padding: 6px 8px 4px 8px; }
+  .comment, .comment-form { font-size: 13px; }
+  textarea { font-size: 16px; }
+  #review { min-height: 0; }
+  section.reason textarea { min-height: 2.6em; }
+  .actions { flex-wrap: wrap; gap: 8px; }
+  .actions button { padding: 8px 12px; }
+  kbd { display: none; }
+  #pending-count { width: 100%; }
+}
+@media (hover: none) {
+  .plus { opacity: .45; }
 }
