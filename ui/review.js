@@ -14,6 +14,11 @@ const viewed = new Set();
 
 const FILE = -1;
 const MARK = { context: " ", add: "+", del: "-" };
+// Rows are built on demand. At load, files fill this many lines in order;
+// the rest, and any file above LARGE_FILE lines, start collapsed, so a huge
+// diff opens at once.
+const EAGER_LINES = 3000;
+const LARGE_FILE = 1000;
 const SCOPE_LABEL = {
   staged: "Staged changes only: plain git commit",
   tracked: "Tracked files as they are: git commit -a",
@@ -66,10 +71,23 @@ async function loadReview() {
   }
   files.forEach((f) => { f.flat = f.hunks.flatMap((h) => h.lines); });
   $("review-scope").textContent = SCOPE_LABEL[scope] || "";
+  const total = files.reduce((n, f) => n + f.flat.length, 0);
+  $("files").textContent = "Rendering " + files.length + " files, " + total + " lines...";
+  // Let that message paint before the DOM work starts.
+  await new Promise(requestAnimationFrame);
   $("files").textContent = "";
   $("files").classList.toggle("empty", !files.length);
   if (!files.length) $("files").textContent = "(nothing to commit in this scope)";
-  files.forEach((f, i) => $("files").append(renderFile(f, i)));
+  let budget = EAGER_LINES;
+  files.forEach((f, i) => {
+    $("files").append(renderFile(f, i));
+    if (f.flat.length <= LARGE_FILE && f.flat.length <= budget) {
+      renderRows(i);
+      budget -= f.flat.length;
+    } else {
+      boxes[i].classList.add("collapsed");
+    }
+  });
   renderTree();
   files.forEach((f, i) => {
     if (f.viewed) setViewed(i, true);
@@ -82,7 +100,7 @@ async function loadReview() {
 function setViewed(fi, on) {
   checks[fi].checked = on;
   if (on) viewed.add(fi); else viewed.delete(fi);
-  boxes[fi].classList.toggle("collapsed", on);
+  if (on) boxes[fi].classList.add("collapsed"); else expand(fi);
   treeItems[fi].classList.toggle("viewed", on);
   updateViewed();
 }
@@ -97,6 +115,7 @@ function restore(fi, r) {
   const c = r.anchor === "lines"
     ? { file: fi, start: r.start, end: r.end, text: r.text, earlier: true }
     : { file: fi, start: FILE, end: FILE, text: r.text, earlier: true };
+  if (r.anchor === "lines") renderRows(fi);
   comments.push(c);
   renderComment(c);
 }
@@ -140,7 +159,7 @@ function renderFile(file, fi) {
   const box = el("div", "file");
   boxes[fi] = box;
   const head = el("div", "file-head");
-  const chevron = button(null, () => box.classList.toggle("collapsed"), "chevron");
+  const chevron = button(null, () => (box.classList.contains("collapsed") ? expand(fi) : box.classList.add("collapsed")), "chevron");
   chevron.append(icon(CHEVRON));
   chevron.title = "Collapse or expand";
   const added = file.flat.filter((l) => l.kind === "add").length;
@@ -169,6 +188,15 @@ function renderFile(file, fi) {
     box.append(el("div", "file-note", "Binary file, no diff."));
     return box;
   }
+  box.append(el("div", "diff-scroll"));
+  return box;
+}
+
+// Builds a file's rows once, the first time it is shown.
+function renderRows(fi) {
+  const file = files[fi];
+  if (file.rendered || file.binary) return;
+  file.rendered = true;
   const table = el("table", "diff");
   let idx = 0;
   file.hunks.forEach((hunk) => {
@@ -180,10 +208,12 @@ function renderFile(file, fi) {
       idx += 1;
     });
   });
-  const scroller = el("div", "diff-scroll");
-  scroller.append(table);
-  box.append(scroller);
-  return box;
+  boxes[fi].querySelector(".diff-scroll").append(table);
+}
+
+function expand(fi) {
+  renderRows(fi);
+  boxes[fi].classList.remove("collapsed");
 }
 
 function renderLine(line, fi, idx) {
@@ -245,7 +275,7 @@ function renderTreeNode(node) {
 }
 
 function reveal(fi) {
-  boxes[fi].classList.remove("collapsed");
+  expand(fi);
   boxes[fi].scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
@@ -315,7 +345,7 @@ function where(fi, start, end) {
 }
 
 function openForm(fi, start, end, existing) {
-  boxes[fi].classList.remove("collapsed");
+  expand(fi);
   const form = el("div", "comment-form");
   const ta = el("textarea");
   ta.rows = 3;
