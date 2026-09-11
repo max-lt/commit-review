@@ -76,11 +76,28 @@ pub fn changes(scope: Scope, amend: bool) -> Result<Vec<FileDiff>, String> {
     let mut files = parse(&git::diff(&args)?);
     if scope == Scope::Worktree {
         for path in git::run(&["ls-files", "--others", "--exclude-standard"])?.lines() {
-            let text = git::diff(&["diff", "--no-color", "--no-index", "/dev/null", path])?;
-            files.append(&mut parse(&text));
+            files.push(untracked(path)?);
         }
     }
     Ok(files)
+}
+
+/// An untracked file as git will show it once added: every line new, or a
+/// binary file. Read directly: a git process per file costs more than the
+/// whole diff when a generated directory is not ignored.
+fn untracked(path: &str) -> Result<FileDiff, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    let binary = bytes.contains(&0);
+    let mut hunks = Vec::new();
+    if !binary && !bytes.is_empty() {
+        let lines: Vec<Line> = String::from_utf8_lossy(&bytes)
+            .lines()
+            .enumerate()
+            .map(|(i, text)| Line { kind: Kind::Add, old: None, new: Some(i as u32 + 1), text: text.to_string() })
+            .collect();
+        hunks.push(Hunk { header: format!("@@ -0,0 +1,{} @@", lines.len()), lines });
+    }
+    Ok(FileDiff { path: path.to_string(), old_path: None, status: Status::Added, binary, hunks })
 }
 
 /// The commit the changes are measured against; the empty tree when there
@@ -203,6 +220,24 @@ mod tests {
         assert!(files[2].binary);
         assert_eq!(files[2].path, "img.png");
         assert!(files[2].hunks.is_empty());
+    }
+
+    #[test]
+    fn untracked_files_are_read_without_git() {
+        let dir = std::env::temp_dir().join(format!("commit-review-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let text = dir.join("new.txt");
+        std::fs::write(&text, "one\ntwo\n").unwrap();
+        let file = untracked(text.to_str().unwrap()).unwrap();
+        assert_eq!(file.status, Status::Added);
+        assert_eq!(file.hunks[0].header, "@@ -0,0 +1,2 @@");
+        assert_eq!(file.hunks[0].lines[1], line(Kind::Add, None, Some(2), "two"));
+        let image = dir.join("img.bin");
+        std::fs::write(&image, b"\x89PNG\0\0").unwrap();
+        let file = untracked(image.to_str().unwrap()).unwrap();
+        assert!(file.binary);
+        assert!(file.hunks.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
