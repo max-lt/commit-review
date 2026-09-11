@@ -1,6 +1,5 @@
 // Summary view and the decision. Loaded after review.js.
 
-const { invoke } = window.__TAURI__.core;
 const DEFAULT_DENY = "Commit denied by human review, no reason given. Do not retry the commit: ask the reviewer what should change.";
 const $ = (id) => document.getElementById(id);
 let scope = "worktree";
@@ -12,7 +11,7 @@ const decide = (accept) => {
   let text = "";
   if (!accept) text = notes ? "Commit denied by human review. Reason:\n" + notes : DEFAULT_DENY;
   else if (notes) text = "Commit accepted by human review, with notes:\n" + notes;
-  return invoke("decide", { accept, notes: text, reviews: reviewState() });
+  return api.decide({ accept, notes: text, reviews: reviewState() });
 };
 $("accept").onclick = () => decide(true);
 $("deny").onclick = () => decide(false);
@@ -90,7 +89,7 @@ const badges = (name, findings) => {
 };
 
 $("reason").focus();
-invoke("context").then((ctx) => {
+api.context().then((ctx) => {
   const { repo, status, command, message, findings, amend } = ctx;
   scope = ctx.scope;
   user = ctx.user;
@@ -129,7 +128,7 @@ invoke("context").then((ctx) => {
 
 // The hook is killed at its timeout and the commit goes through: the
 // binary asks the window to give up first, denying with what was typed.
-window.__TAURI__.event.listen("deadline", () => {
+api.onDeadline(() => {
   const note = "No reviewer answered within an hour: commit denied. Do not retry until the reviewer is back.";
   $("reason").value = [note, $("reason").value.trim()].filter(Boolean).join("\n\n");
   decide(false);

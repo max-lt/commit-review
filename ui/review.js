@@ -64,7 +64,7 @@ async function toggleReview() {
 async function loadReview() {
   $("files").textContent = "Reading the diff...";
   try {
-    files = await invoke("changes");
+    files = await api.changes();
   } catch (e) {
     $("files").textContent = "git error: " + e;
     return;
