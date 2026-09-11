@@ -24,6 +24,39 @@ const NUMBER: f32 = 48.0;
 const PLUS: f32 = 22.0;
 /// Width of the bar marking commented lines.
 const BAR: f32 = 3.0;
+/// Heights assumed before the first layout measures them.
+const HEADER_ESTIMATE: f32 = 32.0;
+const THREAD_ESTIMATE: f32 = 140.0;
+
+/// Where a file sits in the scrolled content, and which part of the content
+/// is worth building. Rows cost a frame each, so the rows outside the window
+/// become spacers of the same height.
+#[derive(Clone, Copy)]
+pub(super) struct Place {
+    /// Top of the file box, in content coordinates.
+    pub(super) top: f32,
+    pub(super) window_top: f32,
+    pub(super) window_bottom: f32,
+}
+
+pub(super) fn header_id(index: usize) -> WidgetId {
+    WidgetId::new(("header", index))
+}
+
+/// Height of a file box before its first layout: the header, then a row
+/// per hunk header and per line unless collapsed.
+pub(super) fn height_estimate(file: &File) -> f32 {
+    let rows = if file.collapsed || file.diff.binary {
+        0
+    } else {
+        file.diff.hunks.len() + file.diff.lines().count()
+    };
+    HEADER_ESTIMATE + rows as f32 * theme::LINE
+}
+
+fn thread_id(index: usize, line: Option<usize>) -> WidgetId {
+    WidgetId::new(("thread", index, line.unwrap_or(usize::MAX)))
+}
 
 /// What a click in the comments asks for, applied once the file is built.
 enum Act {
@@ -35,6 +68,7 @@ enum Act {
     Cancel,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn body(
     ui: Ui<'_>,
     index: usize,
@@ -43,22 +77,36 @@ pub(super) fn body(
     form: &mut Option<Form>,
     user: &str,
     consumed: &mut bool,
+    place: Place,
 ) {
     let mut acts = Vec::new();
     {
         let file: &File = file;
+        let header = ui.geometry(header_id(index)).map_or(HEADER_ESTIMATE, |area| area.height);
         let mut column = ui.layout(flex::column());
+        // A cursor down the content, and the height of the rows skipped so
+        // far, released as one spacer before the next row that is built.
+        let mut y = place.top + header;
+        let mut skipped = 0.0;
+        let visible = |top: f32, height: f32| top + height >= place.window_top && top <= place.window_bottom;
         if file.comments.iter().any(|comment| sits(comment.anchor, None))
             || !file.outdated.is_empty()
             || form.as_ref().is_some_and(|open| open.file == index && sits(open.anchor, None))
         {
-            column.child(flex::item()).build(|ui: Ui<'_>| {
-                let mut area = thread_area(ui);
-                for (i, outdated) in file.outdated.iter().enumerate() {
-                    area.child(flex::item()).build(|ui: Ui<'_>| outdated_box(ui, &file.diff.path, i, outdated, user, &mut acts));
-                }
-                thread(&mut area, index, file, None, form, user, consumed, &mut acts);
-            });
+            let id = thread_id(index, None);
+            let height = column.geometry(id).map_or(THREAD_ESTIMATE, |area| area.height);
+            if visible(y, height) {
+                column.child(flex::item()).widget_id(id).build(|ui: Ui<'_>| {
+                    let mut area = thread_area(ui);
+                    for (i, outdated) in file.outdated.iter().enumerate() {
+                        area.child(flex::item()).build(|ui: Ui<'_>| outdated_box(ui, &file.diff.path, i, outdated, user, &mut acts));
+                    }
+                    thread(&mut area, index, file, None, form, user, consumed, &mut acts);
+                });
+            } else {
+                skipped += height;
+            }
+            y += height;
         }
         if file.diff.binary {
             let note = widgets::text("Binary file, no diff.", theme::sans(theme::SMALL), theme::MUTED);
@@ -70,33 +118,62 @@ pub(super) fn body(
         let selected = drag.filter(|drag| drag.file == index).map(|drag| (drag.start.min(drag.end), drag.start.max(drag.end)));
         let mut flat = 0;
         for hunk in &file.diff.hunks {
-            column.child(flex::item()).build(|ui: Ui<'_>| {
-                let padding = Sides::new().left(BAR + NUMBER * 2.0 + PLUS).top(2.0).bottom(2.0);
-                let mut row = ui.layout(flex::row().padding(padding));
-                row.insert(Rectangle::new().background(theme::HUNK));
-                row.child(flex::item().width(Sizing::grow())).insert(widgets::text(&hunk.header, theme::mono(theme::CODE), theme::MUTED));
-            });
-            for line in &hunk.lines {
-                let highlighted = selected.is_some_and(|(start, end)| (start..=end).contains(&flat));
-                let commented = file.comments.iter().any(|comment| {
-                    matches!(comment.anchor, Anchor::Lines { start, end } if (start..=end).contains(&flat))
+            if visible(y, theme::LINE) {
+                spacer(&mut column, &mut skipped);
+                column.child(flex::item().height(Sizing::fixed(theme::LINE))).build(|ui: Ui<'_>| {
+                    let padding = Sides::new().left(BAR + NUMBER * 2.0 + PLUS).top(2.0);
+                    let mut row = ui.layout(flex::row().padding(padding));
+                    row.insert(Rectangle::new().background(theme::HUNK));
+                    row.child(flex::item().width(Sizing::grow())).insert(widgets::text(&hunk.header, theme::mono(theme::CODE), theme::MUTED));
                 });
-                column
-                    .child(flex::item())
-                    .build(|ui: Ui<'_>| line_row(ui, index, flat, line, highlighted, commented, drag));
+            } else {
+                skipped += theme::LINE;
+            }
+            y += theme::LINE;
+            for line in &hunk.lines {
+                if visible(y, theme::LINE) {
+                    spacer(&mut column, &mut skipped);
+                    let highlighted = selected.is_some_and(|(start, end)| (start..=end).contains(&flat));
+                    let commented = file.comments.iter().any(|comment| {
+                        matches!(comment.anchor, Anchor::Lines { start, end } if (start..=end).contains(&flat))
+                    });
+                    column
+                        .child(flex::item().height(Sizing::fixed(theme::LINE)))
+                        .build(|ui: Ui<'_>| line_row(ui, index, flat, line, highlighted, commented, drag));
+                } else {
+                    skipped += theme::LINE;
+                }
+                y += theme::LINE;
                 let has_thread = file.comments.iter().any(|comment| sits(comment.anchor, Some(flat)))
                     || form.as_ref().is_some_and(|open| open.file == index && sits(open.anchor, Some(flat)));
                 if has_thread {
-                    column.child(flex::item()).build(|ui: Ui<'_>| {
-                        let mut area = thread_area(ui);
-                        thread(&mut area, index, file, Some(flat), form, user, consumed, &mut acts);
-                    });
+                    let id = thread_id(index, Some(flat));
+                    let height = column.geometry(id).map_or(THREAD_ESTIMATE, |area| area.height);
+                    if visible(y, height) {
+                        spacer(&mut column, &mut skipped);
+                        column.child(flex::item()).widget_id(id).build(|ui: Ui<'_>| {
+                            let mut area = thread_area(ui);
+                            thread(&mut area, index, file, Some(flat), form, user, consumed, &mut acts);
+                        });
+                    } else {
+                        skipped += height;
+                    }
+                    y += height;
                 }
                 flat += 1;
             }
         }
+        spacer(&mut column, &mut skipped);
     }
     apply(acts, index, file, form);
+}
+
+/// Stands in for the rows skipped so far, keeping the file its full height.
+fn spacer(column: &mut Ui<'_, state::Open<flex::Layout>>, skipped: &mut f32) {
+    if *skipped > 0.0 {
+        column.child(flex::item().height(Sizing::fixed(*skipped))).build(());
+        *skipped = 0.0;
+    }
 }
 
 /// Whether a comment anchored here belongs under `line`, or on the file
@@ -200,7 +277,8 @@ fn line_row(ui: Ui<'_>, index: usize, flat: usize, line: &Line, highlighted: boo
     });
     cells.child(flex::item().width(Sizing::grow())).build(|ui: Ui<'_>| {
         let mut cell = ui.layout(single::layout().padding(padding.right(12.0)));
-        let options = TextOptions { wrap: TextWrap::Character, ..TextOptions::default() };
+        // Rows keep one fixed height, which the windowing above relies on.
+        let options = TextOptions { wrap: TextWrap::None, ..TextOptions::default() };
         cell.child(single::item().width(Sizing::grow())).insert(widgets::text(&line.text, mono, theme::TEXT).options(options));
     });
 }

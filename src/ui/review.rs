@@ -251,22 +251,39 @@ pub fn build(ui: Ui<'_>, review: &mut Review, user: &str, consumed: &mut bool) {
         row.request_frame();
     }
 
+    // Rows are built only near the viewport, measured in content coordinates
+    // from last frame's layout; a margin of one viewport keeps the next
+    // screen ready while scrolling.
+    let margin = list.viewport_extent.max(400.0);
+    let (window_top, window_bottom) = (list.offset - margin, list.offset + list.viewport_extent + margin);
+    let content_top = row.geometry(list.id.child("content")).map(|content| content.y);
     row.child(flex::item().grow()).build(ScrollArea::new(list, BoundsClip).build(|ui: Ui<'_>| {
-        let mut column = ui.layout(flex::column().gap(14.0).padding(Sides::new().right(10.0)));
+        let mut column = ui.layout(flex::column().gap(GAP).padding(Sides::new().right(10.0)));
         if files.is_empty() {
             let note = widgets::text("(nothing to commit in this scope)", theme::sans(theme::BODY), theme::MUTED);
             column.child(flex::item()).insert(note);
         }
+        let mut estimate = 0.0;
         for (index, file) in files.iter_mut().enumerate() {
-            if shown[index] {
-                column
-                    .child(flex::item())
-                    .widget_id(file_id(index))
-                    .build(|ui: Ui<'_>| file_box(ui, index, file, drag, form, user, consumed));
+            if !shown[index] {
+                continue;
             }
+            let top = match (column.geometry(file_id(index)), content_top) {
+                (Some(area), Some(content)) => area.y - content,
+                _ => estimate,
+            };
+            estimate = top + lines::height_estimate(file) + GAP;
+            let place = lines::Place { top, window_top, window_bottom };
+            column
+                .child(flex::item())
+                .widget_id(file_id(index))
+                .build(|ui: Ui<'_>| file_box(ui, index, file, drag, form, user, consumed, place));
         }
     }));
 }
+
+/// Space between file boxes.
+const GAP: f32 = 14.0;
 
 fn file_id(index: usize) -> WidgetId {
     WidgetId::new(("file", index))
@@ -276,6 +293,7 @@ fn indent(depth: usize) -> String {
     "    ".repeat(depth)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn file_box(
     ui: Ui<'_>,
     index: usize,
@@ -284,12 +302,16 @@ fn file_box(
     form: &mut Option<Form>,
     user: &str,
     consumed: &mut bool,
+    place: lines::Place,
 ) {
     let mut boxed = ui.layout(flex::column());
     boxed.insert(Rectangle::new().border(Border::solid(1.0, theme::BORDER)).radius(BorderRadius::uniform(theme::RADIUS)));
-    boxed.child(flex::item()).build(|ui: Ui<'_>| header(ui, index, file, form));
+    boxed
+        .child(flex::item())
+        .widget_id(lines::header_id(index))
+        .build(|ui: Ui<'_>| header(ui, index, file, form));
     if !file.collapsed {
-        boxed.child(flex::item()).build(|ui: Ui<'_>| lines::body(ui, index, file, drag, form, user, consumed));
+        boxed.child(flex::item()).build(|ui: Ui<'_>| lines::body(ui, index, file, drag, form, user, consumed, place));
     }
 }
 
