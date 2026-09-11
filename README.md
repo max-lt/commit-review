@@ -80,6 +80,37 @@ pending, and is sent again, while the lines it quotes are still in the
 diff; once they changed, the agent acted on it, and the comment shows as
 outdated, not sent unless reopened.
 
+## From a phone
+
+The window is useless when nobody is at the machine, as during a remote
+session. With a login, every review is also published to a small
+Cloudflare worker, and the same UI opens on a phone; the first decision,
+window or phone, wins and the other side is told.
+
+    commit-review auth login --url https://<worker>.workers.dev
+    commit-review auth status
+    commit-review auth logout
+
+Identity is a GitHub account through the device flow, on the machine and
+in the phone browser alike: a code to type on github.com, no secret
+anywhere. The login lands in `~/.config/commit-review/remote.json`. On
+the phone, the worker's root page signs in the same way, lists the pending
+reviews of your machines, and can be installed as a web app. Without a
+login nothing is published; if the worker cannot be reached the window
+says so and works alone.
+
+The review travels as version 1 of the format, the JSON the window itself
+uses: `{ version, context, changes }` up, `{ accept, notes, reviews }`
+back. It sits in a Durable Object of the user, in clear over TLS, until
+the decision reaches the machine or a day passes.
+
+The worker is `worker/`: plain JavaScript, no build step, the UI served
+from `ui/`. Deploying needs a GitHub OAuth App with "Enable Device Flow"
+checked (its client ID goes in `worker/wrangler.toml`) and a Cloudflare
+account:
+
+    cd worker && CLOUDFLARE_ACCOUNT_ID=<id> bunx wrangler deploy
+
 ## Manual launch
 
     commit-review [--command "<shell command>"]

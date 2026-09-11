@@ -9,10 +9,11 @@
 mod diff;
 mod git;
 mod message;
+mod remote;
 mod state;
 
 use std::io::{Read, Write};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tauri::{Emitter, Manager};
 
@@ -42,6 +43,16 @@ struct Review {
     output: Output,
     /// The diff as sent to the window, to quote commented lines on save.
     files: Mutex<Vec<diff::FileDiff>>,
+    /// The same review on the worker, when published.
+    remote: Mutex<Option<remote::Published>>,
+}
+
+/// The review as published: version 1 of the format.
+#[derive(serde::Serialize)]
+struct Document {
+    version: u32,
+    context: Context,
+    changes: Vec<Change>,
 }
 
 /// A file of the diff with what an earlier attempt left on it.
@@ -89,6 +100,7 @@ struct Amend {
 fn main() {
     match std::env::args().nth(1).as_deref() {
         Some("hook") => hook(),
+        Some("auth") => auth(),
         _ => review(flag_value("command"), Output::Plain),
     }
 }
@@ -112,6 +124,35 @@ fn hook() -> ! {
         std::env::set_current_dir(cwd).expect("hook cwd exists");
     }
     review(Some(command.to_string()), Output::Hook)
+}
+
+/// `commit-review auth login --url <worker>`, `auth status`, `auth logout`.
+fn auth() -> ! {
+    let result = match std::env::args().nth(2).as_deref() {
+        Some("login") => {
+            let url = flag_value("url").or_else(|| remote::load().map(|c| c.url));
+            match url {
+                Some(url) => remote::login(&url),
+                None => Err("usage: commit-review auth login --url https://<worker>".to_string()),
+            }
+        }
+        Some("status") => {
+            match remote::load() {
+                Some(c) => println!("Logged in as {} on {}", c.login, c.url),
+                None => println!("Not logged in: reviews stay on this machine"),
+            }
+            Ok(())
+        }
+        Some("logout") => remote::logout(),
+        _ => Err("usage: commit-review auth <login --url URL | status | logout>".to_string()),
+    };
+    match result {
+        Ok(()) => std::process::exit(0),
+        Err(e) => {
+            eprintln!("commit-review: {e}");
+            std::process::exit(1)
+        }
+    }
 }
 
 fn deny(output: Output, reason: &str) -> ! {
@@ -168,8 +209,7 @@ fn scope_of(command: Option<&str>) -> message::Scope {
 }
 
 /// What the window shows.
-#[tauri::command]
-fn context(review: tauri::State<Review>) -> Result<Context, String> {
+fn build_context(review: &Review) -> Result<Context, String> {
     let command = review.command.clone();
     let mut message = command.as_deref().and_then(message::extract);
     let mut amend = None;
@@ -206,8 +246,7 @@ fn context(review: tauri::State<Review>) -> Result<Context, String> {
 }
 
 /// The changes the commit will contain, with the earlier review of each.
-#[tauri::command]
-fn changes(review: tauri::State<Review>) -> Result<Vec<Change>, String> {
+fn build_changes(review: &Review) -> Result<Vec<Change>, String> {
     let command = review.command.as_deref();
     let files = diff::changes(scope_of(command), command.is_some_and(message::amends))?;
     let saved = state::State::load()?;
@@ -222,16 +261,14 @@ fn changes(review: tauri::State<Review>) -> Result<Vec<Change>, String> {
     Ok(changes)
 }
 
-/// The reviewer's decision, with the notes and comments left in the window.
-/// `reviews` is absent when the diff was never opened: the saved state
-/// then stands as it is.
-#[tauri::command]
-fn decide(
-    review: tauri::State<Review>,
-    accept: bool,
-    notes: String,
-    reviews: Option<Vec<state::FileReview>>,
-) {
+/// The reviewer's decision, from the window or the phone, with the notes
+/// and comments left with it. `reviews` is absent when the diff was never
+/// opened: the saved state then stands as it is.
+fn conclude(review: &Review, accept: bool, notes: &str, reviews: Option<Vec<state::FileReview>>) -> ! {
+    // Whoever did not decide has nothing left to decide.
+    if let (Some(config), Some(published)) = (remote::load(), review.remote.lock().unwrap().as_ref()) {
+        remote::withdraw(&config, &published.id);
+    }
     let kept = match (accept, reviews) {
         (true, _) => state::State::clear(),
         (false, Some(reviews)) => state::State::build(&review.files.lock().unwrap(), reviews).save(),
@@ -244,13 +281,59 @@ fn decide(
     finish(review.output, accept, notes.trim())
 }
 
+#[tauri::command]
+fn context(review: tauri::State<Arc<Review>>) -> Result<Context, String> {
+    build_context(&review)
+}
+
+#[tauri::command]
+fn changes(review: tauri::State<Arc<Review>>) -> Result<Vec<Change>, String> {
+    build_changes(&review)
+}
+
+#[tauri::command]
+fn decide(review: tauri::State<Arc<Review>>, accept: bool, notes: String, reviews: Option<Vec<state::FileReview>>) {
+    conclude(&review, accept, &notes, reviews)
+}
+
+/// Publishes the review for the phone and waits for its decision, while
+/// the window waits for the reviewer here. The first decision wins.
+fn publish(review: Arc<Review>, handle: tauri::AppHandle) {
+    let Some(config) = remote::load() else { return };
+    std::thread::spawn(move || {
+        let document = build_context(&review).and_then(|context| {
+            Ok(Document { version: 1, context, changes: build_changes(&review)? })
+        });
+        let published = document
+            .and_then(|doc| serde_json::to_value(doc).map_err(|e| e.to_string()))
+            .and_then(|doc| remote::publish(&config, &doc));
+        let published = match published {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("commit-review: {e}");
+                let _ = handle.emit("remote", serde_json::json!({ "error": e }));
+                return;
+            }
+        };
+        let _ = handle.emit("remote", serde_json::json!({ "url": published.url }));
+        let id = published.id.clone();
+        *review.remote.lock().unwrap() = Some(published);
+        match remote::wait(&config, &id) {
+            Ok(decision) => conclude(&review, decision.accept, &decision.notes, decision.reviews),
+            // Withdrawn: the window decided, the process is on its way out.
+            Err(e) => eprintln!("commit-review: {e}"),
+        }
+    });
+}
+
 fn review(command: Option<String>, output: Output) -> ! {
     // Git paths are shown relative to the root; the cwd may be deeper.
     if let Ok(root) = git::run(&["rev-parse", "--show-toplevel"]) {
         std::env::set_current_dir(root).expect("repository root exists");
     }
+    let review = Arc::new(Review { command, output, files: Mutex::new(Vec::new()), remote: Mutex::new(None) });
     let app = tauri::Builder::default()
-        .manage(Review { command, output, files: Mutex::new(Vec::new()) })
+        .manage(review.clone())
         .invoke_handler(tauri::generate_handler![context, changes, decide])
         .setup(move |app| {
             // Started by a hook, with no terminal: the window has to take
@@ -273,6 +356,7 @@ fn review(command: Option<String>, output: Output) -> ! {
         })
         .build(tauri::generate_context!())
         .expect("commit-review: could not start the window");
+    publish(review, app.handle().clone());
 
     app.run(move |_app, event| {
         // Window closed or Cmd+Q without a click: no decision, so deny.

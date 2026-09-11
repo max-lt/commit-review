@@ -133,3 +133,9 @@ api.onDeadline(() => {
   $("reason").value = [note, $("reason").value.trim()].filter(Boolean).join("\n\n");
   decide(false);
 });
+
+// The same review, published for the reviewer's phone.
+api.onRemote(({ url, error }) => {
+  $("remote").textContent = error ? "Not published: " + error : "Also on your phone: " + url;
+  $("remote").hidden = false;
+});

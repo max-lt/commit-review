@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commit review</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon.png">
+<style>
+  :root { color-scheme: light dark; font: 15px/1.5 -apple-system, system-ui, sans-serif; }
+  body { margin: 0; padding: 20px 18px; max-width: 720px; box-sizing: border-box; }
+  h1 { font-size: 17px; margin: 0 0 14px; display: flex; justify-content: space-between; align-items: baseline; }
+  h1 small { font-size: 12px; opacity: .6; font-weight: normal; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; opacity: .6; margin: 14px 0 6px; }
+  .card { display: block; color: inherit; text-decoration: none; padding: 12px 14px; border-radius: 10px; background: rgba(127,127,127,.12); margin-bottom: 10px; }
+  .card .subject { font-weight: 600; word-break: break-word; }
+  .card .meta { font-size: 12px; opacity: .65; margin-top: 3px; }
+  .code { font: 600 28px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; padding: 10px 14px; border-radius: 10px; background: rgba(127,127,127,.12); display: inline-block; margin: 8px 0; }
+  button, .button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(127,127,127,.4); background: transparent; color: inherit; cursor: pointer; text-decoration: none; display: inline-block; }
+  button.primary, .button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .quiet { background: none; border: 0; opacity: .6; padding: 0; font-size: 12px; }
+  .muted { opacity: .6; }
+  .err { color: #d1242f; }
+</style>
+</head>
+<body>
+<h1>Commit review <small id="who"></small></h1>
+<section id="login" hidden>
+  <p>Reviews published by your machines show here. Sign in with the GitHub account you used for <code>commit-review auth login</code>.</p>
+  <button class="primary" id="start">Sign in with GitHub</button>
+  <div id="code-box" hidden>
+    <p>Enter this code on GitHub, then come back:</p>
+    <div class="code" id="code"></div>
+    <p><a class="button primary" id="verify" target="_blank" rel="noopener">Open GitHub</a></p>
+    <p class="muted" id="polling">Waiting for GitHub...</p>
+  </div>
+  <p class="err" id="login-err"></p>
+</section>
+<section id="list" hidden>
+  <div class="label">Pending reviews</div>
+  <div id="reviews"><p class="muted">Loading...</p></div>
+  <p><button class="quiet" id="logout">Sign out</button></p>
+</section>
+<script>
+const $ = (id) => document.getElementById(id);
+const KEY = "commit-review-token";
+const headers = () => ({ authorization: "Bearer " + localStorage.getItem(KEY) });
+const next = new URLSearchParams(location.search).get("next");
+
+const ago = (ms) => {
+  const m = Math.round((Date.now() - ms) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + " min ago";
+  const h = Math.round(m / 60);
+  return h < 48 ? h + " h ago" : Math.round(h / 24) + " days ago";
+};
+
+async function showList() {
+  $("login").hidden = true;
+  $("list").hidden = false;
+  const res = await fetch("/api/reviews", { headers: headers() });
+  if (res.status === 401) return signOut();
+  const reviews = await res.json();
+  const me = await fetch("/api/me", { headers: headers() }).then((r) => r.json()).catch(() => ({}));
+  $("who").textContent = me.login || "";
+  const box = $("reviews");
+  box.textContent = "";
+  if (!reviews.length) box.innerHTML = '<p class="muted">Nothing waiting for you.</p>';
+  reviews.forEach((r) => {
+    const a = document.createElement("a");
+    a.className = "card";
+    a.href = "/r/" + r.id;
+    const subject = document.createElement("div");
+    subject.className = "subject";
+    subject.textContent = r.subject || (r.amend ? "(amend, message kept)" : "(no message recognized)");
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    const repo = (r.repo || "").split("/").filter(Boolean).pop() || r.repo;
+    meta.textContent = [repo, r.files + " files", r.machine, ago(r.created)].filter(Boolean).join(" · ");
+    a.append(subject, meta);
+    box.appendChild(a);
+  });
+}
+
+function signOut() {
+  localStorage.removeItem(KEY);
+  $("who").textContent = "";
+  $("list").hidden = true;
+  $("login").hidden = false;
+}
+
+async function signIn() {
+  $("start").disabled = true;
+  $("login-err").textContent = "";
+  const res = await fetch("/auth/start", { method: "POST" });
+  if (!res.ok) {
+    $("login-err").textContent = await res.text();
+    $("start").disabled = false;
+    return;
+  }
+  const start = await res.json();
+  $("code").textContent = start.user_code;
+  $("verify").href = start.verification_uri;
+  $("code-box").hidden = false;
+  const name = /iPhone|iPad|Android/.exec(navigator.userAgent)?.[0] || "browser";
+  const poll = async () => {
+    const r = await fetch("/auth/poll", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ device_code: start.device_code, kind: "browser", name }),
+    });
+    if (r.status === 202) return setTimeout(poll, (start.interval + 1) * 1000);
+    if (!r.ok) {
+      $("login-err").textContent = (await r.json().catch(() => ({}))).error || "login refused";
+      $("start").disabled = false;
+      $("code-box").hidden = true;
+      return;
+    }
+    const { token } = await r.json();
+    localStorage.setItem(KEY, token);
+    if (next) location.href = next;
+    else showList();
+  };
+  setTimeout(poll, (start.interval + 1) * 1000);
+}
+
+$("start").onclick = signIn;
+$("logout").onclick = signOut;
+if (localStorage.getItem(KEY)) {
+  if (next) location.href = next;
+  else {
+    showList();
+    setInterval(showList, 10000);
+  }
+} else {
+  $("login").hidden = false;
+}
+</script>
+</body>
+</html>

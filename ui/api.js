@@ -16,6 +16,7 @@ const api = (() => {
       changes: () => invoke("changes"),
       decide: (decision) => invoke("decide", decision),
       onDeadline: (cb) => window.__TAURI__.event.listen("deadline", cb),
+      onRemote: (cb) => window.__TAURI__.event.listen("remote", (e) => cb(e.payload)),
     };
   }
   // Web: the page is /r/<id>, the review at /api/reviews/<id>. Both
@@ -27,7 +28,14 @@ const api = (() => {
   };
   let review = null;
   const load = () => (review ??= fetch(base, { headers: headers() }).then(async (r) => {
-    if (r.status === 401) location.href = "/?next=" + encodeURIComponent(location.pathname);
+    if (r.status === 401) {
+      location.href = "/?next=" + encodeURIComponent(location.pathname);
+      return new Promise(() => {});
+    }
+    if (r.status === 410) {
+      document.body.innerHTML = '<p class="decided">This review was decided on the machine, or has expired. <a href="/">Back to the list</a></p>';
+      return new Promise(() => {});
+    }
     if (!r.ok) throw new Error(await r.text() || r.statusText);
     return r.json();
   }));
@@ -44,5 +52,6 @@ const api = (() => {
       document.body.innerHTML = '<p class="decided">' + (decision.accept ? "Accepted" : "Denied") + ". You can close this page.</p>";
     }),
     onDeadline: () => {},
+    onRemote: () => {},
   };
 })();

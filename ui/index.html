@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Commit review</title>
-<link rel="stylesheet" href="review.css">
+<link rel="stylesheet" href="/review.css">
 <style>
   :root { color-scheme: light dark; font: 14px/1.45 -apple-system, system-ui, sans-serif; }
   body { margin: 0; padding: 18px 24px; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
@@ -38,6 +38,7 @@
   <h1 id="title">The agent wants to commit</h1>
   <div class="repo-line">
     <div class="repo" id="repo">...</div>
+    <div class="repo" id="remote" hidden></div>
     <div class="review-head" id="review-head" hidden><span id="review-scope"></span><span id="review-count"></span></div>
   </div>
 
@@ -85,8 +86,8 @@
     <button class="deny" id="deny">Deny<kbd>esc</kbd></button>
     <button class="accept" id="accept">Accept<kbd>cmd+enter</kbd></button>
   </div>
-<script src="api.js"></script>
-<script src="review.js"></script>
-<script src="app.js"></script>
+<script src="/api.js"></script>
+<script src="/review.js"></script>
+<script src="/app.js"></script>
 </body>
 </html>
