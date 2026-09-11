@@ -25,7 +25,7 @@ pub fn wrapped(value: &str, style: TextStyle, color: Color) -> Text<'_> {
 pub fn panel(background: Color) -> Rectangle {
     Rectangle::new()
         .background(background)
-        .border(Border::solid(1.0, theme::BORDER))
+        .border(Border::solid(1.0, theme::colors().border))
         .radius(BorderRadius::uniform(theme::RADIUS))
 }
 
@@ -85,11 +85,11 @@ impl Widget<DesktopPlatform> for Button<'_> {
 fn colors(look: Look, interaction: Interaction) -> (Color, Option<Color>, Color) {
     let lit = interaction.hovered || interaction.active;
     match look {
-        Look::Plain => (if lit { theme::BORDER } else { theme::RAISED }, Some(theme::BORDER), theme::TEXT),
-        Look::Primary => (if lit { theme::ACCENT_HOVER } else { theme::ACCENT }, None, theme::WHITE),
-        Look::Danger => (if lit { theme::RAISED } else { theme::SURFACE }, Some(theme::DANGER), theme::DANGER),
-        Look::Warning => (if lit { theme::RAISED } else { theme::SURFACE }, Some(theme::WARNING), theme::WARNING),
-        Look::Quiet => (if lit { theme::RAISED } else { Color::TRANSPARENT }, None, theme::MUTED),
+        Look::Plain => (if lit { theme::colors().border } else { theme::colors().raised }, Some(theme::colors().border), theme::colors().text),
+        Look::Primary => (if lit { theme::colors().accent_hover } else { theme::colors().accent }, None, theme::colors().white),
+        Look::Danger => (if lit { theme::colors().raised } else { theme::colors().surface }, Some(theme::colors().danger), theme::colors().danger),
+        Look::Warning => (if lit { theme::colors().raised } else { theme::colors().surface }, Some(theme::colors().warning), theme::colors().warning),
+        Look::Quiet => (if lit { theme::colors().raised } else { Color::TRANSPARENT }, None, theme::colors().muted),
     }
 }
 
@@ -126,23 +126,23 @@ impl Widget<DesktopPlatform> for Checkbox<'_> {
             .layout(flex::row().padding(Sides::xy(8.0, 3.0)).gap(6.0).align(Align::Center));
         row.insert(
             Rectangle::new()
-                .background(if interaction.hovered { theme::RAISED } else { Color::TRANSPARENT })
-                .border(Border::solid(1.0, theme::BORDER))
+                .background(if interaction.hovered { theme::colors().raised } else { Color::TRANSPARENT })
+                .border(Border::solid(1.0, theme::colors().border))
                 .radius(BorderRadius::uniform(theme::RADIUS)),
         );
         row.child(flex::item().fixed(14.0, 14.0)).build(|ui: Ui<'_>| {
             let mut tick = ui.layout(flex::row().align(Align::Center).justify(blit_desktop::layout::Justify::Center));
             tick.insert(
                 Rectangle::new()
-                    .background(if self.checked { theme::ACCENT } else { Color::TRANSPARENT })
-                    .border(Border::solid(1.0, if self.checked { theme::ACCENT } else { theme::MUTED }))
+                    .background(if self.checked { theme::colors().accent } else { Color::TRANSPARENT })
+                    .border(Border::solid(1.0, if self.checked { theme::colors().accent } else { theme::colors().muted }))
                     .radius(BorderRadius::uniform(3.0)),
             );
             if self.checked {
-                tick.child(flex::item()).insert(text("✓", theme::bold(11.0), theme::WHITE));
+                tick.child(flex::item()).insert(text("✓", theme::bold(11.0), theme::colors().white));
             }
         });
-        row.child(flex::item()).insert(text(self.label, theme::sans(theme::SMALL), theme::TEXT));
+        row.child(flex::item()).insert(text(self.label, theme::sans(theme::SMALL), theme::colors().text));
         interaction.clicked
     }
 }
@@ -165,7 +165,7 @@ impl scroll::Scrollbar for Thumb {
     }
 
     fn into_content(self, active: bool) -> (Self::Track, Self::Thumb) {
-        let color = if active { theme::MUTED } else { theme::BORDER };
+        let color = if active { theme::colors().muted } else { theme::colors().border };
         ((), Rectangle::new().background(color).radius(BorderRadius::uniform(3.0)))
     }
 }

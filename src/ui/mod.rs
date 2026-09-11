@@ -37,6 +37,7 @@ const ACCEPT: &str = if cfg!(target_os = "macos") { "Accept   cmd+enter" } else 
 /// Opens the window. Every decision leaves the process from inside it, so
 /// this returns only when the window is closed without one.
 pub fn run(command: Option<String>, output: Output) -> Result<(), String> {
+    theme::load();
     let mut engine: Box<dyn TextLayoutEngine> = Box::new(blit_text_cosmic::Backend::new());
     let fonts = fonts(engine.as_mut())?;
     LAUNCH.with(|launch| *launch.borrow_mut() = Some((command, output)));
@@ -117,7 +118,7 @@ impl Application for App {
     fn render(&mut self, ui: Ui<'_>) {
         let notes_id = WidgetId::new("notes");
         let mut root = ui.layout(flex::column().padding(Sides::xy(24.0, 18.0)).gap(theme::GAP));
-        root.insert(Rectangle::new().background(theme::BACKGROUND));
+        root.insert(Rectangle::new().background(theme::colors().background));
         if !self.started {
             self.started = true;
             root.focus(notes_id);
@@ -129,17 +130,22 @@ impl Application for App {
             }
             _ => "The agent wants to commit".to_string(),
         };
-        root.child(flex::item()).insert(text(&title, theme::bold(16.0), theme::TEXT));
+        root.child(flex::item()).insert(text(&title, theme::bold(16.0), theme::colors().text));
         root.child(flex::item()).build(|ui: Ui<'_>| {
             let mut line = ui.layout(flex::row().gap(16.0).align(Align::End));
             let repo = self.context.as_ref().map_or("", |context| context.repo.as_str());
-            line.child(flex::item().width(Sizing::grow())).insert(text(repo, theme::sans(theme::SMALL), theme::MUTED));
+            line.child(flex::item().width(Sizing::grow())).insert(text(repo, theme::sans(theme::SMALL), theme::colors().muted));
             if self.reviewing {
                 if let Ok(context) = &self.context {
-                    line.child(flex::item()).insert(text(review::scope_label(context.scope), theme::sans(theme::SMALL), theme::MUTED));
+                    line.child(flex::item()).insert(text(review::scope_label(context.scope), theme::sans(theme::SMALL), theme::colors().muted));
                 }
                 let (viewed, total) = self.review.viewed();
-                line.child(flex::item()).insert(text(&format!("{viewed} / {total} viewed"), theme::sans(theme::SMALL), theme::MUTED));
+                line.child(flex::item()).insert(text(&format!("{viewed} / {total} viewed"), theme::sans(theme::SMALL), theme::colors().muted));
+            }
+            let label = if theme::is_dark() { "Light" } else { "Dark" };
+            let switch = Button::new(WidgetId::new("theme"), label).look(Look::Quiet).style(theme::sans(theme::SMALL));
+            if line.child(flex::item()).build(switch) {
+                theme::set_dark(!theme::is_dark());
             }
         });
 
@@ -163,11 +169,11 @@ impl Application for App {
             section.child(flex::item()).insert(text(
                 "NOTES FOR THE AGENT   optional, sent with either decision",
                 theme::sans(11.0),
-                theme::MUTED,
+                theme::colors().muted,
             ));
             section.child(flex::item()).build(|ui: Ui<'_>| {
                 let mut field = ui.layout(single::layout().padding(Sides::xy(12.0, 8.0)));
-                field.insert(panel(theme::SURFACE));
+                field.insert(panel(theme::colors().surface));
                 field.child(single::item().grow()).build(TextArea {
                     state: &mut self.notes_state,
                     id: notes_id,
@@ -191,7 +197,7 @@ impl Application for App {
                 1 => "1 pending comment".to_string(),
                 n => format!("{n} pending comments"),
             };
-            row.child(flex::item().width(Sizing::grow())).insert(text(&pending, theme::sans(theme::SMALL), theme::MUTED));
+            row.child(flex::item().width(Sizing::grow())).insert(text(&pending, theme::sans(theme::SMALL), theme::colors().muted));
             let toggle = if self.reviewing { "Summary" } else { "Review changes" };
             if row.child(flex::item()).build(Button::new(WidgetId::new("toggle review"), toggle)) {
                 action = Some(Action::Toggle);

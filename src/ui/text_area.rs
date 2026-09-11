@@ -76,7 +76,7 @@ impl Widget<DesktopPlatform> for TextArea<'_> {
         }
         let text = ui.platform().text_run(value, style);
         if let Some(area) = ui.geometry(id) {
-            let request = TextRequest { text, area, offset_x: 0.0, color: theme::TEXT, options };
+            let request = TextRequest { text, area, offset_x: 0.0, color: theme::colors().text, options };
             if let Some((down, extend)) = vertical {
                 let caret = ui.platform().text_cursor_rect(&request, state.cursor);
                 let y = if down { caret.y + caret.height * 1.5 } else { caret.y - caret.height * 0.5 };
@@ -171,16 +171,16 @@ impl Atom<DesktopPlatform> for Field {
     }
 
     fn paint(&self, platform: &mut DesktopPlatform, area: LogicalRect) {
-        let request = TextRequest { text: self.text, area, offset_x: 0.0, color: theme::TEXT, options: self.options };
+        let request = TextRequest { text: self.text, area, offset_x: 0.0, color: theme::colors().text, options: self.options };
         for rect in span_rects(platform, &request, &self.selection) {
-            platform.paint_rectangle(Fill::new(rect).background(theme::SELECTED));
+            platform.paint_rectangle(Fill::new(rect).background(theme::colors().selected));
         }
         if self.focused {
             let caret = platform.text_cursor_rect(&request, self.cursor);
             let caret = LogicalRect::new(caret.x, caret.y, caret.width.max(1.0), caret.height);
-            platform.paint_rectangle(Fill::new(caret).background(theme::TEXT));
+            platform.paint_rectangle(Fill::new(caret).background(theme::colors().text));
         }
-        let color = if self.placeholder { theme::MUTED } else { theme::TEXT };
+        let color = if self.placeholder { theme::colors().muted } else { theme::colors().text };
         platform.paint_text(TextRequest { text: self.display, color, ..request });
     }
 

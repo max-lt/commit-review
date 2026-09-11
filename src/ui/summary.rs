@@ -32,7 +32,7 @@ pub fn build(ui: Ui<'_>, summary: &mut Summary, context: &Result<Context, String
         Ok(context) => context,
         Err(error) => {
             column.child(flex::item()).build(|ui: Ui<'_>| {
-                boxed(ui, &format!("git error: {error}"), theme::DANGER);
+                boxed(ui, &format!("git error: {error}"), theme::colors().danger);
             });
             return None;
         }
@@ -49,7 +49,7 @@ pub fn build(ui: Ui<'_>, summary: &mut Summary, context: &Result<Context, String
         };
         section.child(flex::item()).build(|ui: Ui<'_>| {
             let mut row = ui.layout(flex::row().gap(8.0).align(Align::Center));
-            row.child(flex::item()).insert(widgets::text(heading, theme::sans(11.0), theme::MUTED));
+            row.child(flex::item()).insert(widgets::text(heading, theme::sans(11.0), theme::colors().muted));
             let Some(findings) = &context.findings else {
                 return;
             };
@@ -71,7 +71,7 @@ pub fn build(ui: Ui<'_>, summary: &mut Summary, context: &Result<Context, String
         });
         section.child(flex::item()).build(|ui: Ui<'_>| {
             let mut field = ui.layout(single::layout().padding(Sides::xy(12.0, 8.0)));
-            field.insert(panel(theme::SURFACE));
+            field.insert(panel(theme::colors().surface));
             let item = single::item().width(Sizing::grow());
             match (&context.message, &context.findings) {
                 (Some(message), Some(findings)) => {
@@ -84,7 +84,7 @@ pub fn build(ui: Ui<'_>, summary: &mut Summary, context: &Result<Context, String
                     } else {
                         "(manual launch, no command given)"
                     };
-                    field.child(item).insert(widgets::text(note, theme::sans(theme::BODY), theme::MUTED));
+                    field.child(item).insert(widgets::text(note, theme::sans(theme::BODY), theme::colors().muted));
                 }
             }
         });
@@ -106,7 +106,7 @@ pub fn build(ui: Ui<'_>, summary: &mut Summary, context: &Result<Context, String
         column.child(flex::item()).build(|ui: Ui<'_>| {
             let mut section = ui.layout(flex::column().gap(4.0));
             let heading = format!("ALREADY IN HEAD   {}", amend.head);
-            section.child(flex::item()).insert(widgets::text(&heading, theme::sans(11.0), theme::MUTED));
+            section.child(flex::item()).insert(widgets::text(&heading, theme::sans(11.0), theme::colors().muted));
             section.child(flex::item().height(Sizing::fit_range(0.0, 120.0))).build(|ui: Ui<'_>| {
                 code(ui, stat, &amend.stat, TextWrap::None);
             });
@@ -120,7 +120,7 @@ pub fn build(ui: Ui<'_>, summary: &mut Summary, context: &Result<Context, String
         } else {
             ("FILES", "(no changes)")
         };
-        section.child(flex::item()).insert(widgets::text(heading, theme::sans(11.0), theme::MUTED));
+        section.child(flex::item()).insert(widgets::text(heading, theme::sans(11.0), theme::colors().muted));
         let shown = if context.status.is_empty() { empty } else { context.status.as_str() };
         section.child(flex::item().grow()).build(|ui: Ui<'_>| code(ui, status, shown, TextWrap::None));
     });
@@ -151,7 +151,7 @@ fn code(ui: Ui<'_>, state: &mut scroll::State, value: &str, wrap: TextWrap) {
     framed(ui, state, |ui: Ui<'_>| {
         let mut content = ui.layout(single::layout());
         let options = TextOptions { wrap, ..TextOptions::default() };
-        let shown = widgets::text(value, theme::mono(theme::CODE), theme::TEXT).options(options);
+        let shown = widgets::text(value, theme::mono(theme::CODE), theme::colors().text).options(options);
         content.child(single::item().width(Sizing::grow())).insert(shown);
     });
 }
@@ -159,12 +159,12 @@ fn code(ui: Ui<'_>, state: &mut scroll::State, value: &str, wrap: TextWrap) {
 /// A bordered box whose content scrolls.
 fn framed<C: blit::Widget<blit_desktop::DesktopPlatform>>(ui: Ui<'_>, state: &mut scroll::State, content: C) {
     let mut field = ui.layout(single::layout().padding(Sides::xy(12.0, 8.0)));
-    field.insert(panel(theme::SURFACE));
+    field.insert(panel(theme::colors().surface));
     field.child(single::item().grow()).build(ScrollArea::new(state, BoundsClip).build(content));
 }
 
 fn boxed(ui: Ui<'_>, value: &str, color: Color) {
     let mut field = ui.layout(single::layout().padding(Sides::xy(12.0, 8.0)));
-    field.insert(panel(theme::SURFACE));
+    field.insert(panel(theme::colors().surface));
     field.child(single::item().width(Sizing::grow())).insert(widgets::wrapped(value, theme::mono(theme::CODE), color));
 }

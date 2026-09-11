@@ -30,7 +30,7 @@ impl Content<DesktopPlatform> for Marked<'_> {
             .marks
             .iter()
             .map(|(range, kind)| {
-                let color = if *kind == Kind::NonAscii { theme::MARK_DANGER } else { theme::MARK_WARNING };
+                let color = if *kind == Kind::NonAscii { theme::colors().mark_danger } else { theme::colors().mark_warning };
                 (boundaries(self.text, range.clone()), color)
             })
             .collect();
@@ -61,7 +61,7 @@ impl Atom<DesktopPlatform> for MarkedAtom {
             text: self.run,
             area,
             offset_x: 0.0,
-            color: theme::TEXT,
+            color: theme::colors().text,
             options: TextOptions { wrap: self.wrap, ..TextOptions::default() },
         };
         for (offsets, color) in &self.marks {

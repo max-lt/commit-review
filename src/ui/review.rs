@@ -181,7 +181,7 @@ pub fn build(ui: Ui<'_>, review: &mut Review, user: &str, consumed: &mut bool) {
         Some(Ok(files)) => files,
         Some(Err(error)) => {
             let message = format!("git error: {error}");
-            let shown = widgets::wrapped(&message, theme::mono(theme::CODE), theme::DANGER);
+            let shown = widgets::wrapped(&message, theme::mono(theme::CODE), theme::colors().danger);
             row.child(flex::item().width(Sizing::grow())).insert(shown);
             return;
         }
@@ -201,14 +201,14 @@ pub fn build(ui: Ui<'_>, review: &mut Review, user: &str, consumed: &mut bool) {
         let mut pane = ui.layout(flex::column().gap(8.0));
         pane.child(flex::item()).build(|ui: Ui<'_>| {
             let mut field = ui.layout(single::layout().padding(Sides::xy(10.0, 6.0)));
-            field.insert(panel(theme::SURFACE));
+            field.insert(panel(theme::colors().surface));
             let input = TextInput::new(filter_state, WidgetId::new("filter"), filter)
                 .style(theme::sans(13.0))
-                .color(theme::TEXT)
+                .color(theme::colors().text)
                 .placeholder("Filter files...")
-                .placeholder_color(theme::MUTED)
-                .selection_background(theme::SELECTED)
-                .cursor_background(theme::TEXT);
+                .placeholder_color(theme::colors().muted)
+                .selection_background(theme::colors().selected)
+                .cursor_background(theme::colors().text);
             field.child(single::item().width(Sizing::grow())).build(input);
         });
         pane.child(flex::item().grow()).build(ScrollArea::new(tree, BoundsClip).build(|ui: Ui<'_>| {
@@ -260,7 +260,7 @@ pub fn build(ui: Ui<'_>, review: &mut Review, user: &str, consumed: &mut bool) {
     row.child(flex::item().grow()).build(ScrollArea::new(list, BoundsClip).build(|ui: Ui<'_>| {
         let mut column = ui.layout(flex::column().gap(GAP).padding(Sides::new().right(10.0)));
         if files.is_empty() {
-            let note = widgets::text("(nothing to commit in this scope)", theme::sans(theme::BODY), theme::MUTED);
+            let note = widgets::text("(nothing to commit in this scope)", theme::sans(theme::BODY), theme::colors().muted);
             column.child(flex::item()).insert(note);
         }
         let mut estimate = 0.0;
@@ -305,7 +305,7 @@ fn file_box(
     place: lines::Place,
 ) {
     let mut boxed = ui.layout(flex::column());
-    boxed.insert(Rectangle::new().border(Border::solid(1.0, theme::BORDER)).radius(BorderRadius::uniform(theme::RADIUS)));
+    boxed.insert(Rectangle::new().border(Border::solid(1.0, theme::colors().border)).radius(BorderRadius::uniform(theme::RADIUS)));
     boxed
         .child(flex::item())
         .widget_id(lines::header_id(index))
@@ -322,16 +322,16 @@ fn header(ui: Ui<'_>, index: usize, file: &mut File, form: &mut Option<Form>) {
     } else {
         BorderRadius::new().top_left(theme::RADIUS).top_right(theme::RADIUS)
     };
-    row.insert(Rectangle::new().background(theme::SURFACE).radius(radius));
+    row.insert(Rectangle::new().background(theme::colors().surface).radius(radius));
     let chevron = if file.collapsed { "▸" } else { "▾" };
     if row.child(flex::item()).build(Button::new(WidgetId::new(("chevron", index)), chevron).look(Look::Quiet)) {
         file.collapsed = !file.collapsed;
     }
     let (status, color) = match file.diff.status {
-        Status::Added => ("added", theme::SUCCESS),
-        Status::Deleted => ("deleted", theme::DANGER),
-        Status::Renamed => ("renamed", theme::PURPLE),
-        Status::Modified => ("modified", theme::WARNING),
+        Status::Added => ("added", theme::colors().success),
+        Status::Deleted => ("deleted", theme::colors().danger),
+        Status::Renamed => ("renamed", theme::colors().purple),
+        Status::Modified => ("modified", theme::colors().warning),
     };
     row.child(flex::item()).build(Tag { label: status, color });
     let path = match &file.diff.old_path {
@@ -339,11 +339,11 @@ fn header(ui: Ui<'_>, index: usize, file: &mut File, form: &mut Option<Form>) {
         None => file.diff.path.clone(),
     };
     let bold = TextStyle { weight: 600, ..theme::mono(theme::CODE) };
-    row.child(flex::item().width(Sizing::grow())).insert(widgets::text(&path, bold, theme::TEXT));
+    row.child(flex::item().width(Sizing::grow())).insert(widgets::text(&path, bold, theme::colors().text));
     let added = file.diff.lines().filter(|line| line.kind == Kind::Add).count();
     let removed = file.diff.lines().filter(|line| line.kind == Kind::Del).count();
-    row.child(flex::item()).insert(widgets::text(&format!("+{added}"), theme::mono(theme::CODE), theme::SUCCESS));
-    row.child(flex::item()).insert(widgets::text(&format!("-{removed}"), theme::mono(theme::CODE), theme::DANGER));
+    row.child(flex::item()).insert(widgets::text(&format!("+{added}"), theme::mono(theme::CODE), theme::colors().success));
+    row.child(flex::item()).insert(widgets::text(&format!("-{removed}"), theme::mono(theme::CODE), theme::colors().danger));
     if row.child(flex::item()).build(Checkbox { id: WidgetId::new(("viewed", index)), label: "Viewed", checked: file.viewed }) {
         file.viewed = !file.viewed;
         file.collapsed = file.viewed;
