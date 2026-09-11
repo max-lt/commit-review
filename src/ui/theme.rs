@@ -1,4 +1,5 @@
-//! Colors, sizes and text styles of the window, after GitHub's dark theme.
+//! Colors, sizes and text styles of the window: the light palette of the
+//! webview version on main, itself after GitHub's light theme.
 
 use blit_desktop::color::Color;
 use blit_desktop::text::{FontId, TextStyle};
@@ -7,28 +8,28 @@ use blit_desktop::text::{FontId, TextStyle};
 pub const SANS: FontId = FontId(0);
 pub const MONO: FontId = FontId(1);
 
-pub const BACKGROUND: Color = rgb(13, 17, 23);
-pub const SURFACE: Color = rgb(22, 27, 34);
-pub const RAISED: Color = rgb(33, 38, 45);
-pub const BORDER: Color = rgb(48, 54, 61);
-pub const TEXT: Color = rgb(230, 237, 243);
-pub const MUTED: Color = rgb(139, 148, 158);
-pub const ACCENT: Color = rgb(31, 111, 235);
-pub const ACCENT_HOVER: Color = rgb(56, 139, 253);
-pub const DANGER: Color = rgb(248, 81, 73);
-pub const WARNING: Color = rgb(210, 153, 34);
-pub const SUCCESS: Color = rgb(63, 185, 80);
-pub const PURPLE: Color = rgb(163, 113, 247);
+pub const BACKGROUND: Color = rgb(255, 255, 255);
+pub const SURFACE: Color = rgb(240, 240, 240);
+pub const RAISED: Color = rgb(246, 246, 246);
+pub const BORDER: Color = rgb(211, 211, 211);
+pub const TEXT: Color = rgb(31, 35, 40);
+pub const MUTED: Color = rgb(101, 109, 118);
+pub const ACCENT: Color = rgb(47, 111, 235);
+pub const ACCENT_HOVER: Color = rgb(9, 105, 218);
+pub const DANGER: Color = rgb(209, 36, 47);
+pub const WARNING: Color = rgb(191, 135, 0);
+pub const SUCCESS: Color = rgb(26, 127, 55);
+pub const PURPLE: Color = rgb(130, 80, 223);
 pub const WHITE: Color = rgb(255, 255, 255);
 
-pub const ADD_LINE: Color = rgba(46, 160, 67, 38);
-pub const ADD_NUMBER: Color = rgba(46, 160, 67, 77);
-pub const DEL_LINE: Color = rgba(248, 81, 73, 38);
-pub const DEL_NUMBER: Color = rgba(248, 81, 73, 77);
-pub const HUNK: Color = rgba(56, 139, 253, 38);
-pub const SELECTED: Color = rgba(187, 128, 9, 77);
-pub const MARK_DANGER: Color = rgba(248, 81, 73, 110);
-pub const MARK_WARNING: Color = rgba(210, 153, 34, 110);
+pub const ADD_LINE: Color = rgb(230, 255, 236);
+pub const ADD_NUMBER: Color = rgb(204, 255, 216);
+pub const DEL_LINE: Color = rgb(255, 235, 233);
+pub const DEL_NUMBER: Color = rgb(255, 206, 203);
+pub const HUNK: Color = rgb(221, 244, 255);
+pub const SELECTED: Color = rgb(255, 248, 197);
+pub const MARK_DANGER: Color = rgba(209, 36, 47, 110);
+pub const MARK_WARNING: Color = rgba(191, 135, 0, 110);
 
 pub const RADIUS: f32 = 6.0;
 pub const GAP: f32 = 12.0;
