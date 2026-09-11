@@ -93,15 +93,15 @@ tree. Nothing is committed either way.
 
 ## Build and test
 
-    RUSTFLAGS="-C target-cpu=native" cargo build --release
+    cargo build --release
     cargo test
 
 The window is drawn with [blit](https://github.com/nicoburniske/blit),
-which renders on the CPU: `-C target-cpu=native` lets the compiler use the
-SIMD instructions of the processor it builds on, so build on the machine
-that runs the window, and try it the same way with
-`RUSTFLAGS="-C target-cpu=native" cargo run --release`. blit needs a
-nightly toolchain, pinned in `rust-toolchain.toml`.
+built from the clone in `../../forks/blit` through its `gpu` feature:
+frames are composed on the GPU, Metal on macOS and Vulkan on Linux, while
+text layout and glyph rasterization stay on the CPU. blit needs a nightly
+toolchain, pinned in `rust-toolchain.toml`. `BLIT_FRAME_TIMES=1` prints
+the build and present time of every frame to stderr.
 
 The binary is `target/release/commit-review`; the hook registrations
 point at it, so a rebuild is a deploy. Rust and blit, on Wayland or
@@ -117,4 +117,6 @@ macOS; no webview, no npm.
 - No syntax highlighting, no side-by-side view.
 - On Linux the window needs a Wayland session; copy and paste in its
   text fields go through `wl-copy` and `wl-paste`.
-- Long diff lines wrap; one comment box is open at a time.
+- Long diff lines are cut at the right edge: rows keep one height, so
+  only the rows near the viewport are built.
+- One comment box is open at a time, and the text fields have no undo.

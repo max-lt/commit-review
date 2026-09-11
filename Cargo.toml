@@ -8,7 +8,7 @@ description = "Human review gate before a commit started by Claude Code"
 # A local clone of https://github.com/nicoburniske/blit, at 1235e17.
 blit = { path = "../../forks/blit/kernel" }
 blit-cpu = { path = "../../forks/blit/render/cpu" }
-blit-desktop = { path = "../../forks/blit/platform/desktop" }
+blit-desktop = { path = "../../forks/blit/platform/desktop", features = ["gpu"] }
 blit-text = { path = "../../forks/blit/render/text" }
 blit-text-cosmic = { path = "../../forks/blit/render/text-cosmic" }
 serde = { version = "1", features = ["derive"] }
