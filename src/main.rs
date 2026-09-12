@@ -1,14 +1,8 @@
-//! commit-review: human review window before a commit started by Claude Code.
+//! commit-review: human review window before a commit started by a coding agent.
 //!
-//! Usage:
-//!   commit-review hook                Claude Code PreToolUse hook: reads the
-//!                                     event JSON on stdin, answers on stdout
-//!   commit-review enable / disable    turn the gate on or off; disabled, the
-//!                                     hook lets commits through
-//!   commit-review status              the gate and the login
-//!   commit-review auth <login|status|logout>   the phone side
-//!   commit-review [--command <cmd>]   manual launch: exit 0 = accept,
-//!                                     exit 10 = deny; the notes on stdout
+//! `commit-review --help` lists the commands; without one, a manual launch
+//! opens the window on the working tree (exit 0 = accept, 10 = deny, the
+//! notes on stdout).
 
 mod diff;
 mod git;
@@ -20,6 +14,7 @@ mod state;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
+use clap::{Parser, Subcommand};
 use tauri::{Emitter, Manager};
 
 /// Exit code of a manual launch when the reviewer denies the commit.
@@ -102,14 +97,59 @@ struct Amend {
     message_kept: bool,
 }
 
+/// Human review window before a commit started by a coding agent.
+#[derive(Parser)]
+#[command(name = "commit-review", version, about, long_about = None)]
+struct Cli {
+    /// The shell command about to run, as an agent would; without it the
+    /// window shows the whole working tree. Exit 0 = accept, 10 = deny.
+    #[arg(long, value_name = "SHELL COMMAND")]
+    command: Option<String>,
+    #[command(subcommand)]
+    action: Option<Action>,
+}
+
+#[derive(Subcommand)]
+enum Action {
+    /// PreToolUse hook: reads the event JSON on stdin, answers on stdout
+    Hook,
+    /// Turn the gate on
+    Enable,
+    /// Park the gate: the hook lets commits through until `enable`
+    Disable,
+    /// The gate and the login
+    Status,
+    /// The phone side: a GitHub login through the worker
+    Auth {
+        #[command(subcommand)]
+        action: Auth,
+    },
+}
+
+#[derive(Subcommand)]
+enum Auth {
+    /// Log this machine in with GitHub's device flow
+    Login {
+        /// Origin of the worker, e.g. https://commit-review.example.dev;
+        /// the saved one when omitted
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// Who is logged in, and where
+    Status,
+    /// Forget the login
+    Logout,
+}
+
 fn main() {
-    match std::env::args().nth(1).as_deref() {
-        Some("hook") => hook(),
-        Some("auth") => auth(),
-        Some("enable") => toggle(true),
-        Some("disable") => toggle(false),
-        Some("status") => status(),
-        _ => review(flag_value("command"), Output::Plain),
+    let cli = Cli::parse();
+    match cli.action {
+        Some(Action::Hook) => hook(),
+        Some(Action::Enable) => toggle(true),
+        Some(Action::Disable) => toggle(false),
+        Some(Action::Status) => status(),
+        Some(Action::Auth { action }) => auth(action),
+        None => review(cli.command, Output::Plain),
     }
 }
 
@@ -158,25 +198,20 @@ fn status() -> ! {
     std::process::exit(0)
 }
 
-/// `commit-review auth login --url <worker>`, `auth status`, `auth logout`.
-fn auth() -> ! {
-    let result = match std::env::args().nth(2).as_deref() {
-        Some("login") => {
-            let url = flag_value("url").or_else(|| remote::load().map(|c| c.url));
-            match url {
-                Some(url) => remote::login(&url),
-                None => Err("usage: commit-review auth login --url https://<worker>".to_string()),
-            }
-        }
-        Some("status") => {
+fn auth(action: Auth) -> ! {
+    let result = match action {
+        Auth::Login { url } => match url.or_else(|| remote::load().map(|c| c.url)) {
+            Some(url) => remote::login(&url),
+            None => Err("no worker known yet: pass --url https://<worker>".to_string()),
+        },
+        Auth::Status => {
             match remote::load() {
                 Some(c) => println!("Logged in as {} on {}", c.login, c.url),
                 None => println!("Not logged in: reviews stay on this machine"),
             }
             Ok(())
         }
-        Some("logout") => remote::logout(),
-        _ => Err("usage: commit-review auth <login --url URL | status | logout>".to_string()),
+        Auth::Logout => remote::logout(),
     };
     match result {
         Ok(()) => std::process::exit(0),
@@ -218,21 +253,6 @@ fn finish(output: Output, accept: bool, text: &str) -> ! {
         _ => 0,
     };
     std::process::exit(code)
-}
-
-/// Value of `--<name> <value>` or `--<name>=<value>` on the command line.
-fn flag_value(name: &str) -> Option<String> {
-    let flag = format!("--{name}");
-    let mut args = std::env::args().skip(1);
-    while let Some(a) = args.next() {
-        if a == flag {
-            return args.next();
-        }
-        if let Some(v) = a.strip_prefix(&flag).and_then(|v| v.strip_prefix('=')) {
-            return Some(v.to_string());
-        }
-    }
-    None
 }
 
 /// A manual launch has no command: show the whole working tree.
