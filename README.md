@@ -12,6 +12,10 @@ and Codex CLI speak the same hook protocol, so one command serves both:
 
     commit-review hook
 
+To park the gate for a while, `commit-review disable`: the hook then lets
+commits through untouched until `commit-review enable`; `commit-review
+status` says where things stand.
+
 It reads the event JSON on stdin and exits at once, silently, unless the
 command runs `git commit` itself; a mention inside a quoted string or a
 heredoc body does not count. Otherwise it opens the window in the event's
@@ -32,19 +36,18 @@ project's `.claude/settings.json`:
 
     { "hooks": { "PreToolUse": [{ "matcher": "Bash", "hooks": [{
       "type": "command",
-      "command": "/path/to/commit-review/target/release/commit-review hook",
+      "command": "/Users/you/.cargo/bin/commit-review hook",
       "timeout": 3600 }] }] } }
 
 Codex CLI, in `~/.codex/hooks.json` or in a project's `.codex/hooks.json`:
 
     { "hooks": { "PreToolUse": [{ "matcher": "^Bash$", "hooks": [{
       "type": "command",
-      "command": "/path/to/commit-review/target/release/commit-review hook",
+      "command": "/Users/you/.cargo/bin/commit-review hook",
       "timeout": 3600 }] }] } }
 
-Settings changes reach running sessions. If the binary is missing, which
-only `cargo clean` does, the agent reports a hook error and lets the
-commit through: rebuild.
+Settings changes reach running sessions. If the binary is missing, the
+agent reports a hook error and lets the commit through: reinstall.
 
 ## The window
 
@@ -127,11 +130,11 @@ tree. Nothing is committed either way.
 
 ## Build and test
 
-    cargo build --release
+    cargo install --path .
     cargo test
 
-The binary is `target/release/commit-review`; the hook registrations
-point at it, so a rebuild is a deploy. Rust, Tauri 2 on the system
+The binary lands in `~/.cargo/bin`; the hook registrations point at it,
+so an install is a deploy. Rust, Tauri 2 on the system
 webview, a static `ui/` folder, no npm.
 
 ## Known limits

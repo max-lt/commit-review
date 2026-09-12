@@ -3,12 +3,17 @@
 //! Usage:
 //!   commit-review hook                Claude Code PreToolUse hook: reads the
 //!                                     event JSON on stdin, answers on stdout
+//!   commit-review enable / disable    turn the gate on or off; disabled, the
+//!                                     hook lets commits through
+//!   commit-review status              the gate and the login
+//!   commit-review auth <login|status|logout>   the phone side
 //!   commit-review [--command <cmd>]   manual launch: exit 0 = accept,
 //!                                     exit 10 = deny; the notes on stdout
 
 mod diff;
 mod git;
 mod message;
+mod prefs;
 mod remote;
 mod state;
 
@@ -101,6 +106,9 @@ fn main() {
     match std::env::args().nth(1).as_deref() {
         Some("hook") => hook(),
         Some("auth") => auth(),
+        Some("enable") => toggle(true),
+        Some("disable") => toggle(false),
+        Some("status") => status(),
         _ => review(flag_value("command"), Output::Plain),
     }
 }
@@ -117,13 +125,37 @@ fn hook() -> ! {
         .expect("hook event on stdin");
     let event: serde_json::Value = serde_json::from_str(&input).expect("hook event is JSON");
     let command = event["tool_input"]["command"].as_str().unwrap_or("");
-    if !message::is_git_commit(command) {
+    if !message::is_git_commit(command) || !prefs::enabled() {
         std::process::exit(0);
     }
     if let Some(cwd) = event["cwd"].as_str() {
         std::env::set_current_dir(cwd).expect("hook cwd exists");
     }
     review(Some(command.to_string()), Output::Hook)
+}
+
+/// `commit-review enable` / `disable`.
+fn toggle(enabled: bool) -> ! {
+    match prefs::set(enabled) {
+        Ok(()) => {
+            println!("Review {}", if enabled { "enabled" } else { "disabled: commits go through until `commit-review enable`" });
+            std::process::exit(0)
+        }
+        Err(e) => {
+            eprintln!("commit-review: {e}");
+            std::process::exit(1)
+        }
+    }
+}
+
+/// `commit-review status`: the gate and the login.
+fn status() -> ! {
+    println!("Review {}", if prefs::enabled() { "enabled" } else { "disabled" });
+    match remote::load() {
+        Some(c) => println!("Logged in as {} on {}", c.login, c.url),
+        None => println!("Not logged in: reviews stay on this machine"),
+    }
+    std::process::exit(0)
 }
 
 /// `commit-review auth login --url <worker>`, `auth status`, `auth logout`.
