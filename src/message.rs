@@ -152,6 +152,49 @@ pub fn reused_message_rev(cmd: &str) -> Option<String> {
     None
 }
 
+/// Where the commit runs, when the command says so: the last `cd <dir>`
+/// before `git commit`, or the `-C <dir>` of git itself. Relative to the
+/// directory the command starts in.
+pub fn working_dir(cmd: &str) -> Option<String> {
+    let words = shell_words(&strip_heredocs(cmd));
+    let commit = subcommand_index(&words, "commit")?;
+    let mut dir: Option<String> = None;
+    let mut i = 0;
+    while i < commit {
+        if words[i] == "cd" && words.get(i + 1).is_some_and(|w| !w.starts_with('-') && w != "&&" && w != ";") {
+            dir = Some(words[i + 1].clone());
+        }
+        if words[i] == "git" && words.get(i + 1).is_some_and(|w| w == "-C") {
+            if let Some(path) = words.get(i + 2) {
+                dir = Some(match &dir {
+                    Some(base) if !path.starts_with('/') => format!("{base}/{path}"),
+                    _ => path.clone(),
+                });
+            }
+        }
+        i += 1;
+    }
+    dir
+}
+
+/// The file `-F <path>` or `--file=<path>` takes the message from; not
+/// stdin (`-`).
+pub fn message_file(cmd: &str) -> Option<String> {
+    let options = commit_options(cmd);
+    let mut words = options.iter();
+    while let Some(w) = words.next() {
+        let path = if w == "-F" || w == "--file" {
+            words.next().cloned()
+        } else {
+            w.strip_prefix("--file=").map(str::to_string)
+        };
+        if let Some(path) = path.filter(|p| p != "-") {
+            return Some(path);
+        }
+    }
+    None
+}
+
 /// Words after the `commit` subcommand, heredoc bodies stripped.
 fn commit_options(cmd: &str) -> Vec<String> {
     let words = shell_words(&strip_heredocs(cmd));
@@ -545,5 +588,28 @@ mod tests {
         assert!(!is_git_commit("echo \"git commit\""));
         assert!(!is_git_commit("git status"));
         assert!(!is_git_commit("cargo build"));
+    }
+}
+
+#[cfg(test)]
+mod location_tests {
+    use super::*;
+
+    #[test]
+    fn follows_cd_and_git_c_before_the_commit() {
+        assert_eq!(working_dir("cd /w/repo && git add -A && git commit -m x"), Some("/w/repo".into()));
+        assert_eq!(working_dir("cd a && cd b && git commit -m x"), Some("b".into()));
+        assert_eq!(working_dir("git -C sub commit -m x"), Some("sub".into()));
+        assert_eq!(working_dir("cd /w && git -C repo commit -m x"), Some("/w/repo".into()));
+        assert_eq!(working_dir("git commit -m x && cd elsewhere"), None);
+        assert_eq!(working_dir("git commit -m 'cd not here'"), None);
+    }
+
+    #[test]
+    fn finds_the_message_file() {
+        assert_eq!(message_file("git commit -F /tmp/msg.txt"), Some("/tmp/msg.txt".into()));
+        assert_eq!(message_file("git commit --file=notes/msg"), Some("notes/msg".into()));
+        assert_eq!(message_file("git commit -F - <<'EOF'\nx\nEOF"), None);
+        assert_eq!(message_file("git commit -m x"), None);
     }
 }

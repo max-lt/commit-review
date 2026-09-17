@@ -264,6 +264,14 @@ fn scope_of(command: Option<&str>) -> message::Scope {
 fn build_context(review: &Review) -> Result<Context, String> {
     let command = review.command.clone();
     let mut message = command.as_deref().and_then(message::extract);
+    if message.is_none() {
+        // `-F <file>`: the message is on disk, relative to where git runs.
+        message = command
+            .as_deref()
+            .and_then(message::message_file)
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .and_then(|raw| message::from_raw(&raw));
+    }
     let mut amend = None;
     if command.as_deref().is_some_and(message::amends) {
         let message_kept = message.is_none();
@@ -379,6 +387,12 @@ fn publish(review: Arc<Review>, handle: tauri::AppHandle) {
 }
 
 fn review(command: Option<String>, output: Output) -> ! {
+    // The command may move first: `cd repo && git commit`, `git -C repo`.
+    if let Some(dir) = command.as_deref().and_then(message::working_dir) {
+        if let Err(e) = std::env::set_current_dir(&dir) {
+            eprintln!("commit-review: cannot enter {dir}: {e}");
+        }
+    }
     // Git paths are shown relative to the root; the cwd may be deeper.
     if let Ok(root) = git::run(&["rev-parse", "--show-toplevel"]) {
         std::env::set_current_dir(root).expect("repository root exists");

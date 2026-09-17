@@ -52,8 +52,8 @@ agent reports a hook error and lets the commit through: reinstall.
 ## The window
 
 Summary: the commit message as git will record it, subject and body,
-read from `-m`, `--message`, `-am` or the `$(cat <<'EOF' ... EOF)`
-heredoc; the changed files; the exact command. What deserves a look is
+read from `-m`, `--message`, `-am`, the `$(cat <<'EOF' ... EOF)` heredoc
+or the file of `-F`; the changed files; the exact command. What deserves a look is
 highlighted, with one badge per kind and field that a click adds to the
 notes: characters outside printable ASCII (32-126), emails, links,
 Co-authored-by trailers. An amend names the commit it rewrites, shows the
@@ -139,6 +139,9 @@ webview, a static `ui/` folder, no npm.
 
 ## Known limits
 
+- The window opens where the command runs: the hook's cwd, moved by a
+  `cd <dir>` or a `git -C <dir>` before the `git commit` in the same
+  chain. A `cd` hidden in a function or a variable is not followed.
 - A `git add` with paths is read as the whole working tree: the review
   may show more than the commit will contain, never less.
 - A `git commit` inside `$(...)` within double quotes is not detected.
