@@ -165,6 +165,7 @@ export class UserBox {
       created: Date.now(),
       machine: token.name,
       repo: ctx.repo,
+      branch: ctx.branch || null,
       subject: ctx.message ? ctx.message.subject : null,
       amend: Boolean(ctx.amend),
       files: Array.isArray(doc.changes) ? doc.changes.length : 0,

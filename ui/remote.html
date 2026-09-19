@@ -79,7 +79,7 @@ async function showList() {
     const meta = document.createElement("div");
     meta.className = "meta";
     const repo = (r.repo || "").split("/").filter(Boolean).pop() || r.repo;
-    meta.textContent = [repo, r.files + " files", r.machine, ago(r.created)].filter(Boolean).join(" · ");
+    meta.textContent = [repo, r.branch, r.files + " files", r.machine, ago(r.created)].filter(Boolean).join(" · ");
     a.append(subject, meta);
     box.appendChild(a);
   });

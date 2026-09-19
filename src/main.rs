@@ -68,6 +68,8 @@ struct Change {
 #[derive(serde::Serialize)]
 struct Context {
     repo: String,
+    /// Where the commit lands: the branch, or "detached at <hash>".
+    branch: String,
     status: String,
     /// The reviewer, from git config, for the comment boxes.
     user: String,
@@ -255,6 +257,15 @@ fn finish(output: Output, accept: bool, text: &str) -> ! {
     std::process::exit(code)
 }
 
+/// The branch HEAD is on, a name even before its first commit; a short
+/// hash when HEAD is detached.
+fn branch() -> String {
+    git::run(&["symbolic-ref", "--short", "-q", "HEAD"]).unwrap_or_else(|_| {
+        let hash = git::run(&["rev-parse", "--short", "HEAD"]).unwrap_or_else(|_| "?".to_string());
+        format!("detached at {hash}")
+    })
+}
+
 /// A manual launch has no command: show the whole working tree.
 fn scope_of(command: Option<&str>) -> message::Scope {
     command.map_or(message::Scope::Worktree, message::scope)
@@ -295,6 +306,7 @@ fn build_context(review: &Review) -> Result<Context, String> {
     });
     Ok(Context {
         repo: git::run(&["rev-parse", "--show-toplevel"])?,
+        branch: branch(),
         status: git::run(&["status", "--short"])?,
         user: git::run(&["config", "user.name"]).unwrap_or_else(|_| "You".to_string()),
         scope: scope_of(command.as_deref()),

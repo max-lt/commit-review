@@ -90,13 +90,14 @@ const badges = (name, findings) => {
 
 $("reason").focus();
 api.context().then((ctx) => {
-  const { repo, status, command, message, findings, amend } = ctx;
+  const { repo, branch, status, command, message, findings, amend } = ctx;
   scope = ctx.scope;
   user = ctx.user;
   $("repo").textContent = repo;
+  if (!amend) $("title").textContent = "The agent wants to commit to " + branch;
   let noChanges = "(no changes)";
   if (amend) {
-    $("title").textContent = "The agent wants to amend " + amend.head.split(" ")[0];
+    $("title").textContent = "The agent wants to amend " + amend.head.split(" ")[0] + " on " + branch;
     $("amend-head").textContent = amend.head;
     $("amend-stat").textContent = amend.stat;
     $("amend").hidden = false;
