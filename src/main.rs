@@ -353,6 +353,7 @@ fn changes(review: tauri::State<Arc<Review>>) -> Result<Vec<Change>, String> {
 
 #[tauri::command]
 fn decide(review: tauri::State<Arc<Review>>, accept: bool, notes: String, reviews: Option<Vec<state::FileReview>>) {
+    eprintln!("commit-review: {} in the window", if accept { "accepted" } else { "denied" });
     conclude(&review, accept, &notes, reviews)
 }
 
@@ -379,7 +380,10 @@ fn publish(review: Arc<Review>, handle: tauri::AppHandle) {
         let id = published.id.clone();
         *review.remote.lock().unwrap() = Some(published);
         match remote::wait(&config, &id) {
-            Ok(decision) => conclude(&review, decision.accept, &decision.notes, decision.reviews),
+            Ok(decision) => {
+                eprintln!("commit-review: {} on the phone", if decision.accept { "accepted" } else { "denied" });
+                conclude(&review, decision.accept, &decision.notes, decision.reviews)
+            }
             // Withdrawn: the window decided, the process is on its way out.
             Err(e) => eprintln!("commit-review: {e}"),
         }
@@ -415,6 +419,7 @@ fn review(command: Option<String>, output: Output) -> ! {
                     // The window denies through the usual path, saving the review.
                     let _ = handle.emit("deadline", ());
                     std::thread::sleep(GRACE);
+                    eprintln!("commit-review: deadline reached, denying");
                     deny(output, "No reviewer answered within an hour: commit denied. Do not retry until the reviewer is back.")
                 });
             }
@@ -428,6 +433,7 @@ fn review(command: Option<String>, output: Output) -> ! {
         // Window closed or Cmd+Q without a click: no decision, so deny.
         // A gate that accepts by accident is worthless.
         if let tauri::RunEvent::ExitRequested { code: None, .. } = event {
+            eprintln!("commit-review: window closed without a decision");
             deny(output, "Review window closed without a decision: commit denied.")
         }
     });

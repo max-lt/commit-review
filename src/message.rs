@@ -229,8 +229,9 @@ pub fn extract(cmd: &str) -> Option<CommitMessage> {
         .map(|v| heredoc_body(&v).unwrap_or(v))
         .collect();
     if paragraphs.is_empty() {
-        // `git commit -F - <<EOF` or another form without -m: try a bare heredoc.
-        paragraphs.extend(heredoc_body(cmd));
+        // `git commit -F - <<EOF` or another form without -m: the heredoc
+        // the commit line opens, or failing that the first one.
+        paragraphs.extend(commit_heredoc_body(cmd));
     }
     from_raw(&paragraphs.join("\n\n"))
 }
@@ -283,6 +284,32 @@ fn heredoc_delimiter(line: &str) -> Option<String> {
         .take_while(|c| c.is_alphanumeric() || *c == '_')
         .collect();
     (!delim.is_empty()).then_some(delim)
+}
+
+/// Content of the heredoc opened on the line that runs `git commit`, when
+/// there is one; otherwise the first heredoc of the command. Lines inside
+/// other heredoc bodies, a script fed to an interpreter for instance, are
+/// not looked at.
+fn commit_heredoc_body(cmd: &str) -> Option<String> {
+    let mut offset = 0;
+    let mut lines = cmd.split_inclusive('\n');
+    while let Some(line) = lines.next() {
+        let start = offset;
+        offset += line.len();
+        let delim = heredoc_delimiter(line);
+        if delim.is_some() && is_git_commit(line) {
+            return heredoc_body(&cmd[start..]);
+        }
+        if let Some(delim) = delim {
+            for body_line in lines.by_ref() {
+                offset += body_line.len();
+                if body_line.trim() == delim {
+                    break;
+                }
+            }
+        }
+    }
+    heredoc_body(cmd)
 }
 
 /// Content of the first heredoc in the text.
@@ -611,5 +638,28 @@ mod location_tests {
         assert_eq!(message_file("git commit --file=notes/msg"), Some("notes/msg".into()));
         assert_eq!(message_file("git commit -F - <<'EOF'\nx\nEOF"), None);
         assert_eq!(message_file("git commit -m x"), None);
+    }
+}
+
+#[cfg(test)]
+mod heredoc_choice_tests {
+    use super::*;
+
+    const TWO_HEREDOCS: &str = "python3 - <<'EOF'\nimport pathlib\np = pathlib.Path('a.ts'); s = p.read_text()\nold = \"x\"\nEOF\nbunx prettier --write a.ts >/dev/null && git add a.ts && git commit -q -F - <<'EOF'\nlocal: route the calls to Groq (experiment)\n\nNothing in the engine changes.\nEOF\ngit --no-pager log -1 --oneline && git status --short && echo \"(vide = propre)\"\n";
+
+    #[test]
+    fn message_comes_from_the_commit_heredoc_not_the_script() {
+        assert!(is_git_commit(TWO_HEREDOCS));
+        let message = extract(TWO_HEREDOCS).unwrap();
+        assert_eq!(message.subject, "local: route the calls to Groq (experiment)");
+        assert_eq!(message.body, "Nothing in the engine changes.");
+        assert_eq!(scope(TWO_HEREDOCS), Scope::Worktree);
+        assert_eq!(message_file(TWO_HEREDOCS), None);
+    }
+
+    #[test]
+    fn a_lone_heredoc_still_serves_as_message() {
+        let cmd = "git commit -F - <<'EOF'\nsubject\n\nbody\nEOF\n";
+        assert_eq!(extract(cmd).unwrap().subject, "subject");
     }
 }
