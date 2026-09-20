@@ -332,11 +332,20 @@ fn heredoc_body(text: &str) -> Option<String> {
 
 /// Values of the -m / --message options, in order.
 fn message_flags(cmd: &str) -> Vec<String> {
+    // Raw words, heredocs included: a `-m "$(cat <<EOF ...)"` value keeps
+    // its body. Only the commit's own options count, up to the next
+    // command of the chain.
     let words = shell_words(cmd);
     let mut out = Vec::new();
-    let mut i = 0;
+    let Some(commit) = subcommand_index(&words, "commit") else {
+        return out;
+    };
+    let mut i = commit + 1;
     while i < words.len() {
         let w = &words[i];
+        if ["&&", "||", ";", "|"].contains(&w.as_str()) {
+            break;
+        }
         if w == "--message" {
             if let Some(v) = words.get(i + 1) {
                 out.push(v.clone());
@@ -661,5 +670,18 @@ mod heredoc_choice_tests {
     fn a_lone_heredoc_still_serves_as_message() {
         let cmd = "git commit -F - <<'EOF'\nsubject\n\nbody\nEOF\n";
         assert_eq!(extract(cmd).unwrap().subject, "subject");
+    }
+}
+
+#[cfg(test)]
+mod message_flag_scope_tests {
+    use super::*;
+
+    #[test]
+    fn only_the_commit_options_carry_the_message() {
+        let cmd = "cat >> a.css <<'EOF'\n.x { font: 10px -apple-system, system-ui; }\nEOF\ngit add -A && git commit -qm init && printf -- '-m nope' > f";
+        assert_eq!(extract(cmd).unwrap().subject, "init");
+        assert_eq!(extract("git commit -qm init").unwrap().subject, "init");
+        assert!(extract("git add -m && git status").is_none());
     }
 }

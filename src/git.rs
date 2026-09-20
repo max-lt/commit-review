@@ -15,6 +15,8 @@ pub fn diff(args: &[&str]) -> Result<String, String> {
 
 fn output(args: &[&str], ok_codes: &[i32]) -> Result<String, String> {
     let out = Command::new("git")
+        // Paths as they are, not `"r\303\251sum\303\251.txt"`.
+        .args(["-c", "core.quotePath=false"])
         .args(args)
         .output()
         .map_err(|e| format!("git not found: {e}"))?;

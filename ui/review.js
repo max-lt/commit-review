@@ -34,6 +34,46 @@ const el = (tag, className, text) => {
   if (text != null) e.textContent = text;
   return e;
 };
+// Anything outside printable ASCII (32-126) and the tab, marked as in the
+// message: a red mark, an invisible character spelled as its code point.
+const NON_ASCII = /[^\x20-\x7E\t]/;
+const visible = (ch) => {
+  const code = ch.codePointAt(0);
+  if (code < 33 || code === 127 || /\s/.test(ch)) return "<U+" + code.toString(16).toUpperCase().padStart(4, "0") + ">";
+  return ch;
+};
+// Fills `e` with `text`, each run of non-ASCII characters in a <mark>.
+const marked = (e, text) => {
+  if (!NON_ASCII.test(text)) {
+    e.textContent = text;
+    return e;
+  }
+  let run = "";
+  let bad = false;
+  const flush = () => {
+    if (!run) return;
+    if (bad) {
+      const m = el("mark", "bad non-ascii", [...run].map(visible).join(""));
+      m.title = "non-ASCII";
+      e.append(m);
+    } else {
+      e.append(run);
+    }
+    run = "";
+  };
+  for (const ch of text) {
+    const isBad = NON_ASCII.test(ch);
+    if (isBad !== bad) {
+      flush();
+      bad = isBad;
+    }
+    run += ch;
+  }
+  flush();
+  return e;
+};
+const nonAsciiCount = (text) => [...text].filter((ch) => NON_ASCII.test(ch)).length;
+
 const button = (label, onClick, className) => {
   const b = el("button", className, label);
   b.type = "button";
@@ -166,6 +206,10 @@ function renderFile(file, fi) {
   const removed = file.flat.filter((l) => l.kind === "del").length;
   const counts = el("span", "file-counts");
   counts.append(el("span", "add", "+" + added), " ", el("span", "del", "-" + removed));
+  // Non-ASCII characters the commit adds, in the file or its name.
+  const badChars = file.flat.filter((l) => l.kind === "add").reduce((n, l) => n + nonAsciiCount(l.text), 0) + nonAsciiCount(file.path);
+  const badge = badChars ? button(badChars + " non-ASCII", () => appendReason(file.path + ": " + badChars + " non-ASCII character" + (badChars === 1 ? "" : "s")), "badge non-ascii") : "";
+  if (badge) badge.title = "Add to the notes";
   const viewedLabel = el("label", "viewed-label");
   const check = el("input");
   check.type = "checkbox";
@@ -178,7 +222,8 @@ function renderFile(file, fi) {
   head.append(
     chevron,
     el("span", "file-status " + file.status, file.status),
-    el("span", "file-path", file.old_path ? file.old_path + " -> " + file.path : file.path),
+    marked(el("span", "file-path"), file.old_path ? file.old_path + " -> " + file.path : file.path),
+    badge,
     counts,
     viewedLabel,
     comment,
@@ -227,7 +272,7 @@ function renderLine(line, fi, idx) {
     drag = { file: fi, start: idx, end: idx };
     highlight();
   };
-  code.append(plus, el("span", "marker", MARK[line.kind]), el("span", "text", line.text));
+  code.append(plus, el("span", "marker", MARK[line.kind]), marked(el("span", "text"), line.text));
   tr.append(code);
   tr.onmouseenter = () => {
     if (drag && drag.file === fi) {
@@ -267,7 +312,7 @@ function renderTreeNode(node) {
   });
   node.files.sort((a, b) => a.name.localeCompare(b.name)).forEach(({ name, index }) => {
     const li = el("li", "tree-file");
-    li.append(button(name, () => reveal(index)));
+    li.append(marked(button(null, () => reveal(index)), name));
     treeItems[index] = li;
     ul.append(li);
   });

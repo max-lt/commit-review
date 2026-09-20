@@ -141,19 +141,35 @@ pub fn publish(config: &Config, doc: &serde_json::Value) -> Result<Published, St
 /// Blocks until the phone decides. 204 means nothing yet: ask again.
 /// Gone (410) means the review was removed, so no decision will come.
 pub fn wait(config: &Config, id: &str) -> Result<Decision, String> {
+    /// Network and server errors are retried this many times, 3 s apart:
+    /// a parked request dies with the Durable Object that held it.
+    const RETRIES: u32 = 30;
     let http = client(WAIT);
+    let mut failures = 0;
     loop {
         let res = http
             .get(format!("{}/api/reviews/{id}/wait", config.url))
             .bearer_auth(&config.token)
-            .send()
-            .map_err(|e| format!("wait failed: {e}"))?;
-        match res.status().as_u16() {
-            204 => continue,
-            200 => return res.json().map_err(|e| e.to_string()),
-            410 => return Err("review withdrawn".to_string()),
-            code => return Err(format!("wait failed: HTTP {code}")),
+            .send();
+        let failure = match res {
+            Ok(res) => match res.status().as_u16() {
+                204 => {
+                    failures = 0;
+                    continue;
+                }
+                200 => return res.json().map_err(|e| e.to_string()),
+                410 => return Err("review withdrawn".to_string()),
+                code if code >= 500 => format!("HTTP {code}: {}", res.text().unwrap_or_default().trim()),
+                code => return Err(format!("wait failed: HTTP {code}")),
+            },
+            Err(e) => e.to_string(),
+        };
+        failures += 1;
+        if failures > RETRIES {
+            return Err(format!("wait failed: {failure}"));
         }
+        eprintln!("commit-review: wait failed ({failure}), retrying");
+        std::thread::sleep(Duration::from_secs(3));
     }
 }
 

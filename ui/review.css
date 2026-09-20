@@ -140,3 +140,7 @@ button.primary { background: #2f6feb; border-color: #2f6feb; color: #fff; }
 @media (hover: none) {
   .plus { opacity: .45; }
 }
+
+/* Non-ASCII characters in the diff and the file names, as in the message. */
+.file-head button.badge { margin-left: 0; white-space: nowrap; padding: 1px 7px; border: 0; border-radius: 10px; background: #d1242f; color: #fff; font: 10px -apple-system, system-ui, sans-serif; cursor: pointer; }
+td.code mark.bad, .file-path mark.bad, li.tree-file mark.bad { background: #d1242f; color: #fff; border-radius: 3px; padding: 0 2px; }

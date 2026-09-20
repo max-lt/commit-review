@@ -29,15 +29,8 @@ const KIND_LABEL = {
   "co-authored-by": ["Co-authored-by", "Co-authored-by"],
 };
 
-// A character that would be invisible (controls, exotic spaces) shows its
-// code point instead.
-const visible = (ch) => {
-  const code = ch.codePointAt(0);
-  if (code < 33 || code === 127 || /\s/.test(ch)) return "<U+" + code.toString(16).toUpperCase().padStart(4, "0") + ">";
-  return ch;
-};
-
-// Renders text with each finding wrapped in a <mark>. Spans go first, then
+// Renders text with each finding wrapped in a <mark> (`visible` comes from
+// review.js, loaded first). Spans go first, then
 // single characters, which are the more precise mark.
 const render = (el, text, findings) => {
   el.textContent = "";
